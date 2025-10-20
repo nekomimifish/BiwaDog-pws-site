@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>我的个人气象网页（PWS）</title>
+  <meta name="description" content="个人气象站数据展示：气温、湿度、气压、风速，支持本地JSON或远程API。" />
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root{
+      --bg:#0b1320; --panel:#111b2b; --panel-2:#0f1726; --text:#f2f5fa; --muted:#a7b1c2; --accent:#7cc4ff;
+    }
+    *{box-sizing:border-box}
+    body{margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; background:linear-gradient(180deg,#07101c,#0d1930 30%,#0b1320); color:var(--text)}
+    header{padding:28px 20px 8px; text-align:center}
+    h1{margin:0; font-size:28px; letter-spacing:0.3px}
+    .sub{color:var(--muted); font-size:13px; margin-top:6px}
+
+    .container{max-width:1100px; margin:16px auto 40px; padding:0 16px}
+    .grid{display:grid; grid-template-columns: repeat(12,1fr); gap:16px}
+
+    .card{grid-column: span 12; background:linear-gradient(180deg, var(--panel), var(--panel-2)); border:1px solid rgba(255,255,255,.06); border-radius:16px; padding:16px; box-shadow: 0 10px 30px rgba(0,0,0,.25)}
+    .kpi{display:flex; gap:16px; flex-wrap:wrap}
+    .kpi-item{flex:1 1 200px; background:rgba(255,255,255,.03); border-radius:14px; padding:14px; border:1px solid rgba(255,255,255,.06)}
+    .kpi-item h3{margin:0 0 6px; font-size:13px; color:var(--muted); font-weight:600}
+    .kpi-item .val{font-size:26px; font-weight:700}
+    .updated{color:var(--muted); font-size:12px; margin-top:8px}
+
+    .two-col .card{grid-column: span 12}
+    @media(min-width:900px){
+      .two-col .card{grid-column: span 6}
+    }
+
+    .config{display:flex; gap:8px; flex-wrap:wrap; margin-top:6px}
+    input[type="text"], select{
+      background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); color:var(--text); padding:10px 12px; border-radius:12px; outline:none; min-width:220px
+    }
+    button{
+      background:var(--accent); border:none; color:#0a0f18; padding:10px 14px; border-radius:12px; font-weight:700; cursor:pointer
+    }
+    button:disabled{opacity:.6; cursor:not-allowed}
+    a.link{color:var(--accent); text-decoration:none}
+    footer{opacity:.8; text-align:center; font-size:12px; padding:24px}
+    code{background:rgba(255,255,255,.06); padding:2px 6px; border-radius:6px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>我的个人气象网页（PWS）</h1>
+    <div class="sub">支持两种数据来源：<strong>本地 JSON</strong> / <strong>远程 API</strong>。无需后端也能本地预览，日后可无缝切换到服务器/云函数。</div>
+  </header>
+
+  <div class="container">
+    <!-- 配置区 -->
+    <section class="card">
+      <h2 style="margin:4px 0 10px">数据源设置</h2>
+      <div class="config">
+        <label>
+          <select id="mode">
+            <option value="local">本地JSON（data.json）</option>
+            <option value="remote">远程API（/data 或你的云端URL）</option>
+          </select>
+        </label>
+        <input id="apiUrl" type="text" placeholder="https://your-domain.example/api/pws/data" />
+        <button id="btnLoad">加载数据</button>
+        <button id="btnAuto" title="每60秒自动刷新一次">开启自动刷新</button>
+      </div>
+      <div class="updated" id="updated">尚未加载</div>
+      <p style="margin-top:10px; color:var(--muted)">提示：本地模式下，浏览器直接双击打开 <code>index.html</code> 可能因 CORS/文件协议限制读取 <code>data.json</code> 失败。请用任意本地服务器（如 <code>python -m http.server 8080</code>）在同目录启动，再访问 <code>http://localhost:8080</code>。</p>
+    </section>
+
+    <!-- 关键指标 -->
+    <section class="card">
+      <h2 style="margin:4px 0 14px">当前观测</h2>
+      <div class="kpi" id="kpis">
+        <div class="kpi-item"><h3>气温</h3><div class="val" id="kTemp">--</div></div>
+        <div class="kpi-item"><h3>湿度</h3><div class="val" id="kHum">--</div></div>
+        <div class="kpi-item"><h3>气压</h3><div class="val" id="kBaro">--</div></div>
+        <div class="kpi-item"><h3>风速</h3><div class="val" id="kWind">--</div></div>
+      </div>
+    </section>
+
+    <!-- 图表区 -->
+    <section class="grid two-col">
+      <div class="card">
+        <h3 style="margin:0 0 10px">气温/湿度（最近24小时）</h3>
+        <canvas id="chartTH"></canvas>
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 10px">气压/风速（最近24小时）</h3>
+        <canvas id="chartPW"></canvas>
+      </div>
+    </section>
+
+    <!-- 使用说明 -->
+    <section class="card">
+      <h2 style="margin:4px 0 10px">快速上手</h2>
+      <ol style="margin:0 0 8px 18px; line-height:1.7">
+        <li>把本文件保存为 <code>index.html</code>，同目录新建 <code>data.json</code>（示例结构见下）。</li>
+        <li>本地预览：在该目录运行 <code>python -m http.server 8080</code>，浏览器打开 <code>http://localhost:8080</code>。</li>
+        <li>切换数据源：顶部选择 “本地JSON” 或 “远程API”，如部署了后端，填入你的 <code>API URL</code> 并点击“加载数据”。</li>
+        <li>部署上线：把目录推到 GitHub，打开 GitHub Pages；或上传到 Netlify / Vercel（静态托管即可）。</li>
+      </ol>
+      <details>
+        <summary>data.json 示例（复制到同目录的 <code>data.json</code>）</summary>
+        <pre style="white-space:pre-wrap; user-select:text">{
+  "station": {
+    "id": "PWS-001",
+    "name": "自宅屋顶",
+    "location": {"lat": 35.0, "lon": 135.0}
+  },
+  "latest": {
+    "timestamp": "2025-10-20T10:31:00+09:00",
+    "temperature_c": 22.8,
+    "humidity_pct": 63,
+    "pressure_hpa": 1012.6,
+    "wind_ms": 2.4
+  },
+  "history": [
+    {"t": "2025-10-19T11:00:00+09:00", "temp": 24.1, "hum": 58, "hpa": 1011.8, "wind": 2.0},
+    {"t": "2025-10-19T12:00:00+09:00", "temp": 25.2, "hum": 56, "hpa": 1011.5, "wind": 2.2},
+    {"t": "2025-10-19T13:00:00+09:00", "temp": 26.0, "hum": 54, "hpa": 1011.3, "wind": 2.8},
+    {"t": "2025-10-19T14:00:00+09:00", "temp": 26.4, "hum": 52, "hpa": 1011.2, "wind": 3.1}
+  ]
+}
+</pre>
+      </details>
+      <p class="updated">想要自定义字段名？只需在下方脚本里调整 <code>mapData()</code> 的映射。</p>
+    </section>
+
+    <!-- 后端对接提示 -->
+    <section class="card">
+      <h2 style="margin:4px 0 10px">如果你需要后端（可选）</h2>
+      <p>传感器（ESP32/Raspberry Pi）可以每分钟向 <code>POST /upload</code> 发送 JSON，服务器把数据落库并在 <code>GET /data</code> 返回上面相同结构。你可以用任何后端：Flask、Express、Cloudflare Workers 或 Serverless（Vercel/Netlify Functions）。</p>
+      <p>只要保证 <code>GET /data</code> 返回与 <code>data.json</code> 一致的字段，本页面无需修改即可直接对接。</p>
+    </section>
+
+    <footer>
+      © 2025 我的PWS · 轻量模板 | 设计：ChatGPT | <a class="link" href="#" onclick="window.scrollTo({top:0,behavior:'smooth'})">回到顶部</a>
+    </footer>
+  </div>
+
+  <script>
+    // —— 简单数据层 ——
+    const els = {
+      updated: document.getElementById('updated'),
+      kTemp: document.getElementById('kTemp'),
+      kHum: document.getElementById('kHum'),
+      kBaro: document.getElementById('kBaro'),
+      kWind: document.getElementById('kWind'),
+      mode: document.getElementById('mode'),
+      apiUrl: document.getElementById('apiUrl'),
+      btnLoad: document.getElementById('btnLoad'),
+      btnAuto: document.getElementById('btnAuto'),
+    };
+
+    const state = {
+      autoTimer: null,
+      charts: {th:null, pw:null}
+    };
+
+    function fmt(n, unit){
+      if(n === undefined || n === null || Number.isNaN(n)) return '--';
+      return `${Number(n).toFixed(1)} ${unit}`;
+    }
+
+    function mapData(raw){
+      // 将后端或本地JSON映射为统一结构
+      const latest = raw.latest || {};
+      const history = (raw.history || []).slice(-48); // 取最近48条（约24h，按30min或60min采样自调）
+      return {
+        station: raw.station?.name || '未知站点',
+        latest: {
+          t: latest.timestamp,
+          temp: latest.temperature_c,
+          hum: latest.humidity_pct,
+          hpa: latest.pressure_hpa,
+          wind: latest.wind_ms
+        },
+        series: history.map(d=>({ t:d.t, temp:d.temp, hum:d.hum, hpa:d.hpa, wind:d.wind }))
+      };
+    }
+
+    async function fetchData(){
+      const mode = els.mode.value;
+      try{
+        let raw;
+        if(mode === 'local'){
+          const res = await fetch('data.json?_=' + Date.now());
+          raw = await res.json();
+        }else{
+          const url = (els.apiUrl.value || '').trim();
+          if(!url) throw new Error('请填写远程 API URL');
+          const res = await fetch(url, {cache:'no-store'});
+          raw = await res.json();
+        }
+        const data = mapData(raw);
+        render(data);
+      }catch(err){
+        console.error(err);
+        els.updated.textContent = '加载失败：' + err.message;
+      }
+    }
+
+    function render(data){
+      // 顶部KPI
+      els.kTemp.textContent = fmt(data.latest?.temp, '°C');
+      els.kHum.textContent  = fmt(data.latest?.hum,  '%');
+      els.kBaro.textContent = fmt(data.latest?.hpa,  'hPa');
+      els.kWind.textContent = fmt(data.latest?.wind, 'm/s');
+      els.updated.textContent = `站点：${data.station} · 更新时间：${data.latest?.t || '—'}`;
+
+      // 构造序列
+      const labels = data.series.map(d=> new Date(d.t));
+      const tArr   = data.series.map(d=> d.temp ?? null);
+      const hArr   = data.series.map(d=> d.hum ?? null);
+      const pArr   = data.series.map(d=> d.hpa ?? null);
+      const wArr   = data.series.map(d=> d.wind ?? null);
+
+      // 图表：气温/湿度
+      const thCtx = document.getElementById('chartTH');
+      const pwCtx = document.getElementById('chartPW');
+
+      const common = {
+        type: 'line',
+        options: {
+          responsive:true,
+          maintainAspectRatio:false,
+          interaction:{mode:'index', intersect:false},
+          scales: {
+            x: {
+              type:'time',
+              time:{unit:'hour', tooltipFormat:'yyyy-MM-dd HH:mm'},
+              ticks:{ color:'#c7d2e1' }, grid:{ color:'rgba(255,255,255,.06)'}
+            },
+          },
+          plugins: {
+            legend:{ labels:{ color:'#dbe6f5' }},
+            tooltip:{ callbacks:{ label:(ctx)=> `${ctx.dataset.label}: ${ctx.formattedValue}` } }
+          }
+        }
+      };
+
+      // 销毁旧图
+      state.charts.th?.destroy();
+      state.charts.pw?.destroy();
+
+      state.charts.th = new Chart(thCtx, {
+        ...common,
+        data: {
+          labels,
+          datasets: [
+            {label:'温度(°C)', data:tArr, tension:.25, spanGaps:true},
+            {label:'湿度(%)',  data:hArr, tension:.25, spanGaps:true}
+          ]
+        }
+      });
+
+      state.charts.pw = new Chart(pwCtx, {
+        ...common,
+        data: {
+          labels,
+          datasets: [
+            {label:'气压(hPa)', data:pArr, tension:.25, spanGaps:true},
+            {label:'风速(m/s)', data:wArr, tension:.25, spanGaps:true}
+          ]
+        }
+      });
+
+      // 自适应高度
+      thCtx.parentElement.style.height = '360px';
+      pwCtx.parentElement.style.height = '360px';
+    }
+
+    // 事件绑定
+    els.btnLoad.addEventListener('click', fetchData);
+    els.btnAuto.addEventListener('click', ()=>{
+      if(state.autoTimer){
+        clearInterval(state.autoTimer); state.autoTimer=null;
+        els.btnAuto.textContent='开启自动刷新';
+      }else{
+        state.autoTimer = setInterval(fetchData, 60000);
+        els.btnAuto.textContent='停止自动刷新';
+        fetchData();
+      }
+    });
+
+    // 初次加载
+    fetchData();
+  </script>
+</body>
+</html>
