@@ -9,7 +9,7 @@
   <!-- 图表与时间适配器 -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
-  <!-- CSV 解析器（可选） -->
+  <!-- CSV 解析器 -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
   <style>
@@ -160,11 +160,9 @@
     }
 
     function toISO(dtLocal){
-      // 将 <input type="datetime-local"> 的值转为 ISO(本地时区)
       if(!dtLocal) return null;
       const d = new Date(dtLocal);
       if(Number.isNaN(d.getTime())) return null;
-      // 带时区偏移
       const tz = -d.getTimezoneOffset();
       const sign = tz >= 0 ? '+' : '-';
       const hh = String(Math.floor(Math.abs(tz)/60)).padStart(2,'0');
@@ -182,7 +180,6 @@
     }
 
     function render(){
-      // 构造最新值
       const last = state.series[state.series.length - 1] || {};
       els.kTemp.textContent = fmt(last.temp,'°C');
       els.kHum.textContent  = fmt(last.hum, '%');
@@ -191,7 +188,6 @@
       const lastT = last.t || '—';
       els.updated.textContent = `记录数：${state.series.length} · 最新：${lastT}`;
 
-      // 图表数据
       const labels = state.series.map(d=> new Date(d.t));
       const tArr = state.series.map(d=> d.temp ?? null);
       const hArr = state.series.map(d=> d.hum  ?? null);
@@ -211,11 +207,15 @@
         }
       };
 
-      // 销毁旧图
+      // 销毁旧图（双保险）
+      const thEl = document.getElementById('chartTH');
+      const pwEl = document.getElementById('chartPW');
+      try { Chart.getChart(thEl)?.destroy(); } catch(_) {}
+      try { Chart.getChart(pwEl)?.destroy(); } catch(_) {}
       state.charts.th?.destroy();
       state.charts.pw?.destroy();
 
-      state.charts.th = new Chart(document.getElementById('chartTH'), {
+      state.charts.th = new Chart(thEl, {
         ...common,
         data:{ labels, datasets:[
           {label:'温度(°C)', data:tArr, tension:.25, spanGaps:true},
@@ -223,7 +223,7 @@
         ]}
       });
 
-      state.charts.pw = new Chart(document.getElementById('chartPW'), {
+      state.charts.pw = new Chart(pwEl, {
         ...common,
         data:{ labels, datasets:[
           {label:'气压(hPa)', data:pArr, tension:.25, spanGaps:true},
@@ -231,7 +231,6 @@
         ]}
       });
 
-      // 持久化到 localStorage（仅自己浏览器）
       try{ localStorage.setItem('pws_series', JSON.stringify(state.series)); }catch(e){}
     }
 
@@ -247,7 +246,7 @@
           if(!url) throw new Error('请填写远程 API URL');
           const res = await fetch(url, {cache:'no-store'});
           raw = await res.json();
-        }else{ // empty
+        }else{
           raw = {latest:{}, history:[]};
         }
         const u = mapToUnified(raw);
@@ -270,12 +269,10 @@
       };
       state.series.push(rec);
       render();
-      // 清空输入框（时间保留方便连续输入）
       els.inpTemp.value = els.inpHum.value = els.inpHpa.value = els.inpWind.value = '';
     }
 
     function downloadJSON(){
-      // 生成与原模板兼容的 data.json
       const last = state.series[state.series.length-1] || {};
       const out = {
         station:{ id:'PWS-001', name:'BiwaDog 屋顶', location:{lat:35.0, lon:135.0}},
@@ -310,21 +307,49 @@
       reader.readAsText(file);
     }
 
-    function importCSV(file){
-      Papa.parse(file, {
-        header:true, skipEmptyLines:true, complete: (res)=>{
-          const rows = res.data || [];
-          const mapped = rows.map(r=>({
-            t:   r.Timestamp || r.t || r.time || r.datetime || r.date || null,
-            temp: parseFloat(r['Temp_AV(degC)'] || r.temperature_c || r.temp || r.Temp || r.TEMP || '' ) || null,
-            hum:  parseFloat(r['Hum_AV(%)']     || r.humidity_pct  || r.hum  || r.Hum  || r.HUM  || '' ) || null,
-            hpa:  parseFloat(r['Bar_AV(hpa)']   || r.pressure_hpa  || r.hpa  || r.Hpa  || r.HPA  || '' ) || null,
-            wind: parseFloat(r['WS_AV(m/s)']    || r.wind_ms       || r.wind || r.Wind || r.WIND || '' ) || null,
-          }));
-          state.series = state.series.concat(mapped).sort((a,b)=>new Date(a.t)-new Date(b.t));
-          render();
-        }, error:(e)=>{ els.updated.textContent = 'CSV 解析失败：'+e.message }
+    // —— CSV 导入增强：支持分号CSV、Date+Time分列、Excel序列号、表头空格 ——
+    function excelSerialToISO(n){
+      if(n==null || n==='') return null;
+      const base = new Date(Date.UTC(1899,11,30));
+      const ms = Math.round(Number(n) * 86400000);
+      const d = new Date(base.getTime()+ms);
+      if (isNaN(d.getTime())) return null;
+      const tz = -d.getTimezoneOffset();
+      const sign = tz >= 0 ? '+' : '-';
+      const hh = String(Math.floor(Math.abs(tz)/60)).padStart(2,'0');
+      const mm = String(Math.abs(tz)%60).padStart(2,'0');
+      return d.toISOString().replace('Z', `${sign}${hh}:${mm}`);
+    }
+
+    async function importCSV2(file){
+      const parseOnce = (delimiter)=> new Promise((resolve,reject)=>{
+        Papa.parse(file, { header:true, skipEmptyLines:true, delimiter: delimiter||undefined,
+          complete: (res)=> resolve(res), error:(e)=> reject(e) });
       });
+      let res = await parseOnce();
+      if(res && res.data && res.data.length && Object.keys(res.data[0]||{}).length===1){
+        res = await parseOnce(';');
+      }
+      const rows = res.data || [];
+      if(!rows.length){ els.updated.textContent = 'CSV 为空或无法解析'; return; }
+
+      const normalized = rows.map(obj=>{ const o={}; Object.keys(obj||{}).forEach(k=> o[String(k).trim()] = obj[k]); return o; });
+      const mapped = normalized.map(r=>{
+        let t = r.Timestamp || r.t || r.time || r.datetime || r.date || null;
+        if(!t && (r.Date || r.DATE) && (r.Time || r.TIME)) t = `${r.Date||r.DATE} ${r.Time||r.TIME}`;
+        if(t && /^\s*\d+(\.\d+)?\s*$/.test(String(t))) t = excelSerialToISO(t);
+        const num = (v)=>{ const n = parseFloat(String(v).replace(',','.')); return isNaN(n)? null : n; };
+        const temp = num(r['Temp_AV(degC)'] || r.temperature_c || r.temp || r.Temp || r.TEMP);
+        const hum  = num(r['Hum_AV(%)']     || r.humidity_pct  || r.hum  || r.Hum  || r.HUM);
+        const hpa  = num(r['Bar_AV(hpa)']   || r.pressure_hpa  || r.hpa  || r.Hpa  || r.HPA);
+        const wind = num(r['WS_AV(m/s)']    || r.wind_ms       || r.wind || r.Wind || r.WIND);
+        return { t, temp, hum, hpa, wind };
+      }).filter(d=> d.t);
+
+      if(!mapped.length){ els.updated.textContent = 'CSV 解析后没有可用时间列（Timestamp/Date+Time/Excel序列号）'; return; }
+      state.series = state.series.concat(mapped).sort((a,b)=> new Date(a.t) - new Date(b.t));
+      render();
+      els.updated.textContent = `已导入 ${mapped.length} 条记录（共 ${state.series.length} 条）`;
     }
 
     // 事件绑定
@@ -332,9 +357,9 @@
     els.btnAdd.addEventListener('click', addRecord);
     els.btnDownload.addEventListener('click', downloadJSON);
     els.fileJson.addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) importJSON(f); });
-    els.fileCsv.addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) importCSV(f); });
+    els.fileCsv.addEventListener('change', async e=>{ const f=e.target.files?.[0]; if(f) await importCSV2(f); });
 
-    // 初次加载：优先 data.json；若失败则使用 localStorage 或空白
+    // 初次加载
     (async()=>{
       try{
         els.mode.value = 'local';
