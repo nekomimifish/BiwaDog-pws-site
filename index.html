@@ -1,374 +1,238 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>我的个人气象网页（PWS） · 可手动录入 & 实时扩展版</title>
-  <meta name="description" content="个人气象站数据展示与管理：手动添加记录、导入CSV/JSON、下载发布文件，未来可对接后端实现实时更新。" />
-
-  <!-- 图表与时间适配器 -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
-  <!-- CSV 解析器 -->
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>琵琶湖风 · PWS（地图背景版）</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
-    :root{
-      --bg:#0b1320; --panel:#111b2b; --panel-2:#0f1726; --text:#f2f5fa; --muted:#a7b1c2; --accent:#7cc4ff; --ok:#8dffb7;
+    :root {
+      --bg:#0b1016; --panel:#111a25; --text:#e9f0fb; --muted:#98a9c2; --accent:#3aa0ff; --border:#1e2a3b;
     }
     *{box-sizing:border-box}
-    body{margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; background:linear-gradient(180deg,#07101c,#0d1930 30%,#0b1320); color:var(--text)}
-    header{padding:26px 16px 8px; text-align:center}
-    h1{margin:0; font-size:28px; letter-spacing:0.3px}
-    .sub{color:var(--muted); font-size:13px; margin-top:6px}
-
-    .container{max-width:1200px; margin:16px auto 36px; padding:0 14px}
-    .grid{display:grid; grid-template-columns: 320px 1fr; gap:16px}
-    @media(max-width:980px){.grid{grid-template-columns:1fr}}
-
-    .card{background:linear-gradient(180deg, var(--panel), var(--panel-2)); border:1px solid rgba(255,255,255,.06); border-radius:16px; padding:16px; box-shadow: 0 10px 30px rgba(0,0,0,.25)}
-    .title{margin:0 0 10px}
-    .row{display:flex; gap:8px; align-items:center; margin-bottom:8px}
-    label{font-size:12px; color:var(--muted); width:92px}
-    input[type="text"], input[type="number"], input[type="datetime-local"], select{
-      background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); color:var(--text); padding:9px 10px; border-radius:12px; outline:none; flex:1 1 auto
-    }
-    input::placeholder{color:#93a0b3}
-    button{background:var(--accent); border:none; color:#0a0f18; padding:10px 12px; border-radius:12px; font-weight:700; cursor:pointer}
-    button.ghost{background:transparent; border:1px solid rgba(255,255,255,.2); color:var(--text)}
-    button.full{width:100%}
-    small.muted{color:var(--muted)}
-    .ok{color:var(--ok)}
-
-    .kpi{display:flex; gap:16px; flex-wrap:wrap; margin-bottom:10px}
-    .kpi-item{flex:1 1 180px; background:rgba(255,255,255,.03); border-radius:14px; padding:14px; border:1px solid rgba(255,255,255,.06)}
-    .kpi-item h3{margin:0 0 6px; font-size:13px; color:var(--muted); font-weight:600}
-    .kpi-item .val{font-size:24px; font-weight:700}
-    .updated{color:var(--muted); font-size:12px; margin-top:6px}
-
-    .chart{height:360px}
-    footer{opacity:.8; text-align:center; font-size:12px; padding:18px}
-    a.link{color:var(--accent); text-decoration:none}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans";line-height:1.5}
+    header{padding:18px 16px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0f1824,#0b1016)}
+    header h1{margin:0;font-size:20px}
+    header p{margin:4px 0 0 0;color:var(--muted);font-size:13px}
+    main{max-width:1100px;margin:0 auto;padding:16px}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 10px 20px rgba(0,0,0,.25)}
+    .muted{color:var(--muted);font-size:12px}
+    .pill{border:1px solid var(--border);padding:6px 10px;border-radius:999px;font-size:12px;color:var(--muted)}
+    .hidden{display:none!important}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:#0f1824;color:var(--text);cursor:pointer;text-decoration:none}
+    .btn.primary{background:var(--accent);color:#00152e;border-color:transparent}
+    .btn:hover{filter:brightness(1.05)}
+    .flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .grow{flex:1 1 auto}
+    /* Hero Leaflet Map */
+    #heroMap{height:56vh; min-height:360px; border-radius:14px; border:1px solid var(--border); overflow:hidden}
+    .leaflet-container{background:#0c1420}
+    .toolbar{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px}
+    table{width:100%;border-collapse:collapse}
+    thead th{position:sticky;top:0;background:#0f1826;border-bottom:1px solid var(--border);text-align:left;padding:8px;font-size:12px;white-space:nowrap}
+    tbody td{border-bottom:1px solid #172235;padding:8px;font-size:13px;vertical-align:top}
+    .status{font-size:12px;color:var(--muted)}
   </style>
 </head>
 <body>
   <header>
-    <h1>我的个人气象网页（PWS）</h1>
-    <div class="sub">像 Windguru 一样的“站点页”——<strong>手动录入</strong>、<strong>导入CSV/JSON</strong>、<strong>导出 data.json</strong>，将来可切换到远程 API 实时更新。</div>
+    <h1>琵琶湖风 · PWS（地图背景版）</h1>
+    <p>首页背景已换成与 <code>windmap</code> 相同的 Leaflet 实时地图；下方仍有“按月加载 CSV”的入口。</p>
   </header>
 
-  <div class="container grid">
-    <!-- 左侧：数据管理面板 -->
-    <aside class="card" id="panel">
-      <h2 class="title">数据管理</h2>
-
-      <div class="row"><label>数据源</label>
-        <select id="mode">
-          <option value="local" selected>本地 JSON（data.json）</option>
-          <option value="remote">远程 API（/data）</option>
-          <option value="empty">空白（仅本地编辑）</option>
-        </select>
+  <main>
+    <!-- HERO: Leaflet Map with station marker -->
+    <section class="card">
+      <div id="heroMap"></div>
+      <div class="muted" style="padding-top:8px">
+        修改站点坐标与默认缩放：在脚本 <code>CONFIG</code> 内调整 <code>center / zoom / station.lat / station.lng</code>。
       </div>
-      <div class="row"><label>API URL</label>
-        <input id="apiUrl" type="text" placeholder="https://your-app.example.com/data" />
-      </div>
-      <div class="row" style="gap:10px">
-        <button id="btnLoad" class="full">加载数据</button>
-      </div>
+    </section>
 
-      <hr style="border-color:rgba(255,255,255,.08); margin:14px 0">
-
-      <h3 class="title" style="font-size:16px">手动添加记录</h3>
-      <div class="row"><label>时间</label><input id="inpTime" type="datetime-local" /></div>
-      <div class="row"><label>气温 (°C)</label><input id="inpTemp" type="number" step="0.1" placeholder="23.0" /></div>
-      <div class="row"><label>湿度 (%)</label><input id="inpHum" type="number" step="1" placeholder="60" /></div>
-      <div class="row"><label>气压 (hPa)</label><input id="inpHpa" type="number" step="0.1" placeholder="1012.3" /></div>
-      <div class="row"><label>风速 (m/s)</label><input id="inpWind" type="number" step="0.1" placeholder="2.5" /></div>
-      <div class="row" style="gap:10px"><button id="btnAdd" class="full">添加到图表</button></div>
-      <small class="muted">备注：手动添加会先保存在浏览器内存与 localStorage；如果需要让所有人可见，请点击下方“下载 data.json”，然后上传到 GitHub 仓库覆盖。</small>
-
-      <hr style="border-color:rgba(255,255,255,.08); margin:14px 0">
-
-      <h3 class="title" style="font-size:16px">导入/导出</h3>
-      <div class="row"><label>导入 CSV</label><input id="fileCsv" type="file" accept=".csv" /></div>
-      <div class="row"><label>导入 JSON</label><input id="fileJson" type="file" accept=".json" /></div>
-      <div class="row" style="gap:10px">
-        <button id="btnDownload" class="full">下载 data.json（用于GitHub）</button>
-      </div>
-
-      <div class="updated" id="updated">尚未加载</div>
-    </aside>
-
-    <!-- 右侧：展示区 -->
-    <main>
-      <section class="card">
-        <h2 class="title">当前观测</h2>
-        <div class="kpi">
-          <div class="kpi-item"><h3>气温</h3><div class="val" id="kTemp">--</div></div>
-          <div class="kpi-item"><h3>湿度</h3><div class="val" id="kHum">--</div></div>
-          <div class="kpi-item"><h3>气压</h3><div class="val" id="kBaro">--</div></div>
-          <div class="kpi-item"><h3>风速</h3><div class="val" id="kWind">--</div></div>
+    <!-- Calendar + month CSV loader -->
+    <section class="card">
+      <div class="toolbar">
+        <div class="flex">
+          <button id="prevBtn" class="btn">◀ 上一月</button>
+          <button id="nextBtn" class="btn">下一月 ▶</button>
         </div>
-      </section>
+        <div class="flex">
+          <select id="yearSel"></select>
+          <select id="monSel"></select>
+          <button id="loadMonthBtn" class="btn primary">查看本月数据（/data/YYYY-MM.csv）</button>
+        </div>
+      </div>
+      <div class="cal" id="cal" style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">
+        <!-- week headers + days will be injected -->
+      </div>
+      <div class="status" id="status"></div>
+    </section>
 
-      <section class="card">
-        <h3 class="title" style="font-size:16px">气温 / 湿度（最近数据）</h3>
-        <canvas id="chartTH" class="chart"></canvas>
-      </section>
+    <!-- CSV table viewer -->
+    <section id="tableSection" class="card hidden">
+      <div class="toolbar">
+        <div class="flex">
+          <input id="searchInput" class="grow" type="text" placeholder="搜索（Search）..." />
+          <span id="meta" class="pill"></span>
+        </div>
+        <a id="downloadBtn" class="btn" download="filtered.csv">导出当前筛选 Export</a>
+      </div>
+      <div style="overflow:auto; max-height: 60vh; border:1px solid var(--border); border-radius:10px">
+        <table id="csvTable">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
 
-      <section class="card">
-        <h3 class="title" style="font-size:16px">气压 / 风速（最近数据）</h3>
-        <canvas id="chartPW" class="chart"></canvas>
-      </section>
-    </main>
-  </div>
+    <!-- Optional local test -->
+    <section class="card">
+      <details>
+        <summary>管理员快速测试（可选）</summary>
+        <div class="flex" style="margin-top:8px">
+          <input id="fileInput" type="file" accept=".csv,text/csv">
+          <span class="muted">或直接将文件命名为 <code>YYYY-MM.csv</code> 放到 <code>/data/</code>。</span>
+        </div>
+      </details>
+    </section>
+  </main>
 
-  <footer>
-    © 2025 我的PWS · 手动录入 & 实时扩展版 | <a class="link" href="#" onclick="window.scrollTo({top:0,behavior:'smooth'})">回到顶部</a>
-  </footer>
-
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script>
-    // —— 基础引用 ——
-    const els = {
-      updated: document.getElementById('updated'),
-      kTemp: document.getElementById('kTemp'),
-      kHum: document.getElementById('kHum'),
-      kBaro: document.getElementById('kBaro'),
-      kWind: document.getElementById('kWind'),
-      mode: document.getElementById('mode'),
-      apiUrl: document.getElementById('apiUrl'),
-      btnLoad: document.getElementById('btnLoad'),
-      btnAdd: document.getElementById('btnAdd'),
-      btnDownload: document.getElementById('btnDownload'),
-      fileCsv: document.getElementById('fileCsv'),
-      fileJson: document.getElementById('fileJson'),
-      inpTime: document.getElementById('inpTime'),
-      inpTemp: document.getElementById('inpTemp'),
-      inpHum: document.getElementById('inpHum'),
-      inpHpa: document.getElementById('inpHpa'),
-      inpWind: document.getElementById('inpWind'),
-    };
+  // ---- CONFIG for map + calendar/table ----
+  const CONFIG = {
+    center: [35.215, 135.97],   // 琵琶湖中部示例
+    zoom: 10,
+    station: { name: "Shinhama（示例）", lat: 35.2115, lng: 135.9770 },
+    columns: { time:"Timestamp", wd:"WD_AV(deg)", ws:"WS_AV(m/s)" }
+  };
 
-    const state = {
-      series: [], // {t, temp, hum, hpa, wind}
-      charts: {th:null, pw:null}
-    };
+  // ---- Map init (Leaflet, same stack as windmap) ----
+  let map, stationMarker;
+  function initMap(){
+    map = L.map('heroMap').setView(CONFIG.center, CONFIG.zoom);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18, attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+    stationMarker = L.marker([CONFIG.station.lat, CONFIG.station.lng]).addTo(map)
+      .bindTooltip(CONFIG.station.name, {permanent:false});
+  }
+  document.addEventListener('DOMContentLoaded', initMap);
 
-    function fmt(n, unit){
-      if(n === undefined || n === null || Number.isNaN(n)) return '--';
-      return `${Number(n).toFixed(1)} ${unit}`;
+  // ---- Calendar ----
+  const yearSel = document.getElementById('yearSel');
+  const monSel = document.getElementById('monSel');
+  const cal = document.getElementById('cal');
+  const today = new Date();
+  let curYear = today.getFullYear();
+  let curMon = today.getMonth(); // 0-11
+  const pad2 = (n)=>String(n).padStart(2,'0');
+  function populateYM(){
+    yearSel.innerHTML='';
+    const y0 = today.getFullYear()-5, y1 = today.getFullYear()+2;
+    for(let y=y0; y<=y1; y++){
+      const opt = document.createElement('option');
+      opt.value=String(y); opt.textContent=String(y);
+      if (y===curYear) opt.selected=true;
+      yearSel.appendChild(opt);
     }
-
-    function toISO(dtLocal){
-      if(!dtLocal) return null;
-      const d = new Date(dtLocal);
-      if(Number.isNaN(d.getTime())) return null;
-      const tz = -d.getTimezoneOffset();
-      const sign = tz >= 0 ? '+' : '-';
-      const hh = String(Math.floor(Math.abs(tz)/60)).padStart(2,'0');
-      const mm = String(Math.abs(tz)%60).padStart(2,'0');
-      return d.toISOString().replace('Z', `${sign}${hh}:${mm}`);
+    monSel.innerHTML='';
+    for(let m=0;m<12;m++){
+      const opt=document.createElement('option');
+      opt.value=String(m); opt.textContent=(m+1)+' 月';
+      if (m===curMon) opt.selected=true;
+      monSel.appendChild(opt);
     }
-
-    function mapToUnified(raw){
-      const latest = raw.latest || {};
-      const history = (raw.history || []).map(d=>({
-        t: d.t,
-        temp: d.temp, hum: d.hum, hpa: d.hpa, wind: d.wind
-      }));
-      return { latest, history };
+  }
+  function renderCalendar(y, m){
+    cal.innerHTML='';
+    const wds=['日','一','二','三','四','五','六'];
+    for(const w of wds){ const wd=document.createElement('div'); wd.style.cssText='text-align:center;font-size:12px;color:var(--muted);padding:6px 0'; wd.textContent=w; cal.appendChild(wd); }
+    const first = new Date(y,m,1);
+    const startWd = first.getDay();
+    const days = new Date(y,m+1,0).getDate();
+    for(let i=0;i<startWd;i++){
+      const d=document.createElement('div'); d.style.cssText='padding:10px 0;text-align:center;border:1px solid var(--border);border-radius:8px;background:#0f1824;opacity:.45'; d.textContent=''; cal.appendChild(d);
     }
-
-    function render(){
-      const last = state.series[state.series.length - 1] || {};
-      els.kTemp.textContent = fmt(last.temp,'°C');
-      els.kHum.textContent  = fmt(last.hum, '%');
-      els.kBaro.textContent = fmt(last.hpa,'hPa');
-      els.kWind.textContent = fmt(last.wind,'m/s');
-      const lastT = last.t || '—';
-      els.updated.textContent = `记录数：${state.series.length} · 最新：${lastT}`;
-
-      const labels = state.series.map(d=> new Date(d.t));
-      const tArr = state.series.map(d=> d.temp ?? null);
-      const hArr = state.series.map(d=> d.hum  ?? null);
-      const pArr = state.series.map(d=> d.hpa  ?? null);
-      const wArr = state.series.map(d=> d.wind ?? null);
-
-      const common = {
-        type:'line',
-        options:{
-          responsive:true,
-          maintainAspectRatio:false,
-          interaction:{mode:'index', intersect:false},
-          scales:{
-            x:{ type:'time', time:{unit:'hour', tooltipFormat:'yyyy-MM-dd HH:mm'} },
-          },
-          plugins:{ legend:{ labels:{ color:'#dbe6f5' }}}
-        }
-      };
-
-      // 销毁旧图（双保险）
-      const thEl = document.getElementById('chartTH');
-      const pwEl = document.getElementById('chartPW');
-      try { Chart.getChart(thEl)?.destroy(); } catch(_) {}
-      try { Chart.getChart(pwEl)?.destroy(); } catch(_) {}
-      state.charts.th?.destroy();
-      state.charts.pw?.destroy();
-
-      state.charts.th = new Chart(thEl, {
-        ...common,
-        data:{ labels, datasets:[
-          {label:'温度(°C)', data:tArr, tension:.25, spanGaps:true},
-          {label:'湿度(%)',  data:hArr, tension:.25, spanGaps:true}
-        ]}
-      });
-
-      state.charts.pw = new Chart(pwEl, {
-        ...common,
-        data:{ labels, datasets:[
-          {label:'气压(hPa)', data:pArr, tension:.25, spanGaps:true},
-          {label:'风速(m/s)', data:wArr, tension:.25, spanGaps:true}
-        ]}
-      });
-
-      try{ localStorage.setItem('pws_series', JSON.stringify(state.series)); }catch(e){}
+    for(let d=1; d<=days; d++){
+      const div=document.createElement('div'); div.style.cssText='padding:10px 0;text-align:center;border:1px solid var(--border);border-radius:8px;background:#0f1824;user-select:none'; div.textContent=String(d);
+      if (y===today.getFullYear() && m===today.getMonth() && d===today.getDate()) div.style.outline='2px solid var(--accent)';
+      cal.appendChild(div);
     }
+  }
+  populateYM(); renderCalendar(curYear, curMon);
+  yearSel.addEventListener('change', ()=>{ curYear=parseInt(yearSel.value,10); renderCalendar(curYear,curMon); });
+  monSel.addEventListener('change', ()=>{ curMon=parseInt(monSel.value,10); renderCalendar(curYear,curMon); });
+  document.getElementById('prevBtn').addEventListener('click', ()=>{ curMon--; if(curMon<0){curMon=11;curYear--;} syncYM(); });
+  document.getElementById('nextBtn').addEventListener('click', ()=>{ curMon++; if(curMon>11){curMon=0;curYear++;} syncYM(); });
+  function syncYM(){ yearSel.value=String(curYear); monSel.value=String(curMon); renderCalendar(curYear,curMon); }
 
-    async function load(){
-      try{
-        const mode = els.mode.value;
-        let raw;
-        if(mode==='local'){
-          const res = await fetch('data.json?_=' + Date.now());
-          raw = await res.json();
-        }else if(mode==='remote'){
-          const url = (els.apiUrl.value||'').trim();
-          if(!url) throw new Error('请填写远程 API URL');
-          const res = await fetch(url, {cache:'no-store'});
-          raw = await res.json();
-        }else{
-          raw = {latest:{}, history:[]};
-        }
-        const u = mapToUnified(raw);
-        state.series = [...u.history];
-        render();
-      }catch(err){
-        console.error(err);
-        els.updated.textContent = '加载失败：' + err.message;
+  // ---- CSV table viewer (same as之前) ----
+  let headers=[], rawData=[], filtered=[];
+  const tableSection = document.getElementById('tableSection');
+  const metaEl = document.getElementById('meta');
+  const statusEl = document.getElementById('status');
+  function setStatus(msg){ statusEl.textContent = msg || ''; }
+  function show(el, yes){ el.classList.toggle('hidden', !yes); }
+  function escapeHTML(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+  function toCSV(rows){return rows.map(r=>r.map(cell=>{const str=(cell==null)?'':String(cell);return /[",\n]/.test(str)?'"'+str.replace(/"/g,'""')+'"':str}).join(',')).join('\n')}
+  function renderTable(rows){
+    const thead = document.querySelector('#csvTable thead');
+    const tbody = document.querySelector('#csvTable tbody');
+    thead.innerHTML = '<tr>'+headers.map(h=>`<th>${escapeHTML(h)}</th>`).join('')+'</tr>';
+    const slice = rows.slice(0, 5000);
+    tbody.innerHTML = slice.map(r=>'<tr>'+headers.map((_,i)=>`<td>${escapeHTML(r[i]??'')}</td>`).join('')+'</tr>').join('');
+    metaEl.textContent = `共 ${rows.length.toLocaleString()} 行（显示前 ${slice.length.toLocaleString()} 行）`;
+    const csv = toCSV([headers, ...rows]);
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    document.getElementById('downloadBtn').href = URL.createObjectURL(blob);
+  }
+  function applyFilter(){
+    const q = document.getElementById('searchInput').value.trim().toLowerCase();
+    filtered = !q ? rawData : rawData.filter(r=>r.some(v=>(v!=null)&&String(v).toLowerCase().includes(q)));
+    renderTable(filtered);
+  }
+  document.getElementById('searchInput').addEventListener('input', ()=>{
+    const el = document.getElementById('searchInput');
+    clearTimeout(el._t); el._t=setTimeout(applyFilter,150);
+  });
+  function parseAndShow(textOrFile, label){
+    setStatus('正在解析 CSV ...');
+    Papa.parse(textOrFile, {
+      header:false, skipEmptyLines:true, dynamicTyping:false, worker:true, encoding:'UTF-8',
+      complete: (res)=>{
+        const rows = res.data||[];
+        if (!rows.length){ setStatus('CSV 空文件或格式异常'); show(tableSection,false); return; }
+        headers = rows[0].map((h,i)=> (h===''||h==null)?('col_'+(i+1)):String(h));
+        rawData = rows.slice(1);
+        filtered = rawData;
+        show(tableSection,true);
+        renderTable(filtered);
+        setStatus(`解析完成（${label}），共 ${rows.length-1} 行`);
       }
+    });
+  }
+  document.getElementById('loadMonthBtn').addEventListener('click', async ()=>{
+    const y = parseInt(yearSel.value,10);
+    const m = parseInt(monSel.value,10)+1;
+    const path = `/data/${y}-${pad2(m)}.csv`;
+    try{
+      setStatus(`请求 ${path} ...`);
+      const res = await fetch(path, {cache:'no-store'});
+      if (!res.ok) throw new Error('HTTP '+res.status);
+      const text = await res.text();
+      parseAndShow(text, path);
+    }catch(err){
+      console.error(err);
+      setStatus(`加载失败：${path}（请确认该文件已上传且同源）`);
+      show(tableSection,false);
     }
-
-    function addRecord(){
-      const t = toISO(els.inpTime.value) || new Date().toISOString();
-      const rec = {
-        t,
-        temp: els.inpTemp.value===''?null: Number(els.inpTemp.value),
-        hum:  els.inpHum.value===''?null:  Number(els.inpHum.value),
-        hpa:  els.inpHpa.value===''?null:  Number(els.inpHpa.value),
-        wind: els.inpWind.value===''?null: Number(els.inpWind.value)
-      };
-      state.series.push(rec);
-      render();
-      els.inpTemp.value = els.inpHum.value = els.inpHpa.value = els.inpWind.value = '';
-    }
-
-    function downloadJSON(){
-      const last = state.series[state.series.length-1] || {};
-      const out = {
-        station:{ id:'PWS-001', name:'BiwaDog 屋顶', location:{lat:35.0, lon:135.0}},
-        latest:{
-          timestamp: last.t||null,
-          temperature_c: last.temp??null,
-          humidity_pct:  last.hum??null,
-          pressure_hpa:  last.hpa??null,
-          wind_ms:       last.wind??null
-        },
-        history: state.series
-      };
-      const blob = new Blob([JSON.stringify(out, null, 2)], {type:'application/json'});
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'data.json';
-      a.click();
-      URL.revokeObjectURL(a.href);
-      els.updated.textContent = '已下载 data.json，请上传到 GitHub 覆盖以对外生效。';
-    }
-
-    function importJSON(file){
-      const reader = new FileReader();
-      reader.onload = () => {
-        try{
-          const j = JSON.parse(reader.result);
-          const u = mapToUnified(j);
-          state.series = [...u.history];
-          render();
-        }catch(e){ els.updated.textContent = 'JSON 解析失败：'+e.message }
-      };
-      reader.readAsText(file);
-    }
-
-    // —— CSV 导入增强：支持分号CSV、Date+Time分列、Excel序列号、表头空格 ——
-    function excelSerialToISO(n){
-      if(n==null || n==='') return null;
-      const base = new Date(Date.UTC(1899,11,30));
-      const ms = Math.round(Number(n) * 86400000);
-      const d = new Date(base.getTime()+ms);
-      if (isNaN(d.getTime())) return null;
-      const tz = -d.getTimezoneOffset();
-      const sign = tz >= 0 ? '+' : '-';
-      const hh = String(Math.floor(Math.abs(tz)/60)).padStart(2,'0');
-      const mm = String(Math.abs(tz)%60).padStart(2,'0');
-      return d.toISOString().replace('Z', `${sign}${hh}:${mm}`);
-    }
-
-    async function importCSV2(file){
-      const parseOnce = (delimiter)=> new Promise((resolve,reject)=>{
-        Papa.parse(file, { header:true, skipEmptyLines:true, delimiter: delimiter||undefined,
-          complete: (res)=> resolve(res), error:(e)=> reject(e) });
-      });
-      let res = await parseOnce();
-      if(res && res.data && res.data.length && Object.keys(res.data[0]||{}).length===1){
-        res = await parseOnce(';');
-      }
-      const rows = res.data || [];
-      if(!rows.length){ els.updated.textContent = 'CSV 为空或无法解析'; return; }
-
-      const normalized = rows.map(obj=>{ const o={}; Object.keys(obj||{}).forEach(k=> o[String(k).trim()] = obj[k]); return o; });
-      const mapped = normalized.map(r=>{
-        let t = r.Timestamp || r.t || r.time || r.datetime || r.date || null;
-        if(!t && (r.Date || r.DATE) && (r.Time || r.TIME)) t = `${r.Date||r.DATE} ${r.Time||r.TIME}`;
-        if(t && /^\s*\d+(\.\d+)?\s*$/.test(String(t))) t = excelSerialToISO(t);
-        const num = (v)=>{ const n = parseFloat(String(v).replace(',','.')); return isNaN(n)? null : n; };
-        const temp = num(r['Temp_AV(degC)'] || r.temperature_c || r.temp || r.Temp || r.TEMP);
-        const hum  = num(r['Hum_AV(%)']     || r.humidity_pct  || r.hum  || r.Hum  || r.HUM);
-        const hpa  = num(r['Bar_AV(hpa)']   || r.pressure_hpa  || r.hpa  || r.Hpa  || r.HPA);
-        const wind = num(r['WS_AV(m/s)']    || r.wind_ms       || r.wind || r.Wind || r.WIND);
-        return { t, temp, hum, hpa, wind };
-      }).filter(d=> d.t);
-
-      if(!mapped.length){ els.updated.textContent = 'CSV 解析后没有可用时间列（Timestamp/Date+Time/Excel序列号）'; return; }
-      state.series = state.series.concat(mapped).sort((a,b)=> new Date(a.t) - new Date(b.t));
-      render();
-      els.updated.textContent = `已导入 ${mapped.length} 条记录（共 ${state.series.length} 条）`;
-    }
-
-    // 事件绑定
-    els.btnLoad.addEventListener('click', load);
-    els.btnAdd.addEventListener('click', addRecord);
-    els.btnDownload.addEventListener('click', downloadJSON);
-    els.fileJson.addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) importJSON(f); });
-    els.fileCsv.addEventListener('change', async e=>{ const f=e.target.files?.[0]; if(f) await importCSV2(f); });
-
-    // 初次加载
-    (async()=>{
-      try{
-        els.mode.value = 'local';
-        await load();
-      }catch(_){
-        try{ const cached = JSON.parse(localStorage.getItem('pws_series')||'[]'); state.series = cached; }catch(e){}
-        render();
-      }
-    })();
+  });
+  document.getElementById('fileInput').addEventListener('change', e=>{
+    const f = e.target.files?.[0]; if(!f) return;
+    parseAndShow(f, '本地文件 '+f.name);
+  });
   </script>
 </body>
 </html>
