@@ -3,236 +3,58 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>琵琶湖风 · PWS（地图背景版）</title>
+  <title>琵琶湖风 · PWS（相对路径修正版）</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
-    :root {
-      --bg:#0b1016; --panel:#111a25; --text:#e9f0fb; --muted:#98a9c2; --accent:#3aa0ff; --border:#1e2a3b;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans";line-height:1.5}
-    header{padding:18px 16px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0f1824,#0b1016)}
-    header h1{margin:0;font-size:20px}
-    header p{margin:4px 0 0 0;color:var(--muted);font-size:13px}
-    main{max-width:1100px;margin:0 auto;padding:16px}
-    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 10px 20px rgba(0,0,0,.25)}
-    .muted{color:var(--muted);font-size:12px}
-    .pill{border:1px solid var(--border);padding:6px 10px;border-radius:999px;font-size:12px;color:var(--muted)}
-    .hidden{display:none!important}
-    .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:#0f1824;color:var(--text);cursor:pointer;text-decoration:none}
-    .btn.primary{background:var(--accent);color:#00152e;border-color:transparent}
-    .btn:hover{filter:brightness(1.05)}
-    .flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .grow{flex:1 1 auto}
-    /* Hero Leaflet Map */
-    #heroMap{height:56vh; min-height:360px; border-radius:14px; border:1px solid var(--border); overflow:hidden}
-    .leaflet-container{background:#0c1420}
-    .toolbar{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px}
-    table{width:100%;border-collapse:collapse}
-    thead th{position:sticky;top:0;background:#0f1826;border-bottom:1px solid var(--border);text-align:left;padding:8px;font-size:12px;white-space:nowrap}
-    tbody td{border-bottom:1px solid #172235;padding:8px;font-size:13px;vertical-align:top}
-    .status{font-size:12px;color:var(--muted)}
+    #heroMap{height:56vh;min-height:360px;border-radius:14px;border:1px solid #1e2a3b}
   </style>
 </head>
 <body>
-  <header>
-    <h1>琵琶湖风 · PWS（地图背景版）</h1>
-    <p>首页背景已换成与 <code>windmap</code> 相同的 Leaflet 实时地图；下方仍有“按月加载 CSV”的入口。</p>
-  </header>
-
   <main>
-    <!-- HERO: Leaflet Map with station marker -->
-    <section class="card">
+    <section>
       <div id="heroMap"></div>
-      <div class="muted" style="padding-top:8px">
-        修改站点坐标与默认缩放：在脚本 <code>CONFIG</code> 内调整 <code>center / zoom / station.lat / station.lng</code>。
-      </div>
     </section>
-
-    <!-- Calendar + month CSV loader -->
-    <section class="card">
-      <div class="toolbar">
-        <div class="flex">
-          <button id="prevBtn" class="btn">◀ 上一月</button>
-          <button id="nextBtn" class="btn">下一月 ▶</button>
-        </div>
-        <div class="flex">
-          <select id="yearSel"></select>
-          <select id="monSel"></select>
-          <button id="loadMonthBtn" class="btn primary">查看本月数据（/data/YYYY-MM.csv）</button>
-        </div>
-      </div>
-      <div class="cal" id="cal" style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">
-        <!-- week headers + days will be injected -->
-      </div>
-      <div class="status" id="status"></div>
-    </section>
-
-    <!-- CSV table viewer -->
-    <section id="tableSection" class="card hidden">
-      <div class="toolbar">
-        <div class="flex">
-          <input id="searchInput" class="grow" type="text" placeholder="搜索（Search）..." />
-          <span id="meta" class="pill"></span>
-        </div>
-        <a id="downloadBtn" class="btn" download="filtered.csv">导出当前筛选 Export</a>
-      </div>
-      <div style="overflow:auto; max-height: 60vh; border:1px solid var(--border); border-radius:10px">
-        <table id="csvTable">
-          <thead></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Optional local test -->
-    <section class="card">
-      <details>
-        <summary>管理员快速测试（可选）</summary>
-        <div class="flex" style="margin-top:8px">
-          <input id="fileInput" type="file" accept=".csv,text/csv">
-          <span class="muted">或直接将文件命名为 <code>YYYY-MM.csv</code> 放到 <code>/data/</code>。</span>
-        </div>
-      </details>
+    <section>
+      <select id="yearSel"></select>
+      <select id="monSel"></select>
+      <button id="loadMonthBtn">查看本月数据（./data/YYYY-MM.csv）</button>
+      <div id="status"></div>
+      <pre id="preview" style="max-height:40vh;overflow:auto;border:1px solid #1e2a3b;padding:8px"></pre>
     </section>
   </main>
-
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script>
-  // ---- CONFIG for map + calendar/table ----
-  const CONFIG = {
-    center: [35.215, 135.97],   // 琵琶湖中部示例
-    zoom: 10,
-    station: { name: "Shinhama（示例）", lat: 35.2115, lng: 135.9770 },
-    columns: { time:"Timestamp", wd:"WD_AV(deg)", ws:"WS_AV(m/s)" }
-  };
+    // Leaflet 基本初始化
+    const map = L.map('heroMap').setView([35.215,135.97], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap'}).addTo(map);
+    L.marker([35.2115,135.9770]).addTo(map).bindTooltip('Shinhama（示例）');
 
-  // ---- Map init (Leaflet, same stack as windmap) ----
-  let map, stationMarker;
-  function initMap(){
-    map = L.map('heroMap').setView(CONFIG.center, CONFIG.zoom);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18, attribution: '&copy; OpenStreetMap'
-    }).addTo(map);
-    stationMarker = L.marker([CONFIG.station.lat, CONFIG.station.lng]).addTo(map)
-      .bindTooltip(CONFIG.station.name, {permanent:false});
-  }
-  document.addEventListener('DOMContentLoaded', initMap);
+    // 月份选择器 + 相对路径加载 CSV
+    const yearSel = document.getElementById('yearSel');
+    const monSel = document.getElementById('monSel');
+    const statusEl = document.getElementById('status');
+    const preview = document.getElementById('preview');
+    const now = new Date();
+    function pad2(n){return String(n).padStart(2,'0')}
+    for(let y=now.getFullYear()-5;y<=now.getFullYear()+2;y++){const o=document.createElement('option');o.value=y;o.textContent=y;if(y===now.getFullYear())o.selected=true;yearSel.appendChild(o);}
+    for(let m=0;m<12;m++){const o=document.createElement('option');o.value=m;o.textContent=(m+1)+' 月';if(m===now.getMonth())o.selected=true;monSel.appendChild(o);}
 
-  // ---- Calendar ----
-  const yearSel = document.getElementById('yearSel');
-  const monSel = document.getElementById('monSel');
-  const cal = document.getElementById('cal');
-  const today = new Date();
-  let curYear = today.getFullYear();
-  let curMon = today.getMonth(); // 0-11
-  const pad2 = (n)=>String(n).padStart(2,'0');
-  function populateYM(){
-    yearSel.innerHTML='';
-    const y0 = today.getFullYear()-5, y1 = today.getFullYear()+2;
-    for(let y=y0; y<=y1; y++){
-      const opt = document.createElement('option');
-      opt.value=String(y); opt.textContent=String(y);
-      if (y===curYear) opt.selected=true;
-      yearSel.appendChild(opt);
-    }
-    monSel.innerHTML='';
-    for(let m=0;m<12;m++){
-      const opt=document.createElement('option');
-      opt.value=String(m); opt.textContent=(m+1)+' 月';
-      if (m===curMon) opt.selected=true;
-      monSel.appendChild(opt);
-    }
-  }
-  function renderCalendar(y, m){
-    cal.innerHTML='';
-    const wds=['日','一','二','三','四','五','六'];
-    for(const w of wds){ const wd=document.createElement('div'); wd.style.cssText='text-align:center;font-size:12px;color:var(--muted);padding:6px 0'; wd.textContent=w; cal.appendChild(wd); }
-    const first = new Date(y,m,1);
-    const startWd = first.getDay();
-    const days = new Date(y,m+1,0).getDate();
-    for(let i=0;i<startWd;i++){
-      const d=document.createElement('div'); d.style.cssText='padding:10px 0;text-align:center;border:1px solid var(--border);border-radius:8px;background:#0f1824;opacity:.45'; d.textContent=''; cal.appendChild(d);
-    }
-    for(let d=1; d<=days; d++){
-      const div=document.createElement('div'); div.style.cssText='padding:10px 0;text-align:center;border:1px solid var(--border);border-radius:8px;background:#0f1824;user-select:none'; div.textContent=String(d);
-      if (y===today.getFullYear() && m===today.getMonth() && d===today.getDate()) div.style.outline='2px solid var(--accent)';
-      cal.appendChild(div);
-    }
-  }
-  populateYM(); renderCalendar(curYear, curMon);
-  yearSel.addEventListener('change', ()=>{ curYear=parseInt(yearSel.value,10); renderCalendar(curYear,curMon); });
-  monSel.addEventListener('change', ()=>{ curMon=parseInt(monSel.value,10); renderCalendar(curYear,curMon); });
-  document.getElementById('prevBtn').addEventListener('click', ()=>{ curMon--; if(curMon<0){curMon=11;curYear--;} syncYM(); });
-  document.getElementById('nextBtn').addEventListener('click', ()=>{ curMon++; if(curMon>11){curMon=0;curYear++;} syncYM(); });
-  function syncYM(){ yearSel.value=String(curYear); monSel.value=String(curMon); renderCalendar(curYear,curMon); }
-
-  // ---- CSV table viewer (same as之前) ----
-  let headers=[], rawData=[], filtered=[];
-  const tableSection = document.getElementById('tableSection');
-  const metaEl = document.getElementById('meta');
-  const statusEl = document.getElementById('status');
-  function setStatus(msg){ statusEl.textContent = msg || ''; }
-  function show(el, yes){ el.classList.toggle('hidden', !yes); }
-  function escapeHTML(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-  function toCSV(rows){return rows.map(r=>r.map(cell=>{const str=(cell==null)?'':String(cell);return /[",\n]/.test(str)?'"'+str.replace(/"/g,'""')+'"':str}).join(',')).join('\n')}
-  function renderTable(rows){
-    const thead = document.querySelector('#csvTable thead');
-    const tbody = document.querySelector('#csvTable tbody');
-    thead.innerHTML = '<tr>'+headers.map(h=>`<th>${escapeHTML(h)}</th>`).join('')+'</tr>';
-    const slice = rows.slice(0, 5000);
-    tbody.innerHTML = slice.map(r=>'<tr>'+headers.map((_,i)=>`<td>${escapeHTML(r[i]??'')}</td>`).join('')+'</tr>').join('');
-    metaEl.textContent = `共 ${rows.length.toLocaleString()} 行（显示前 ${slice.length.toLocaleString()} 行）`;
-    const csv = toCSV([headers, ...rows]);
-    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-    document.getElementById('downloadBtn').href = URL.createObjectURL(blob);
-  }
-  function applyFilter(){
-    const q = document.getElementById('searchInput').value.trim().toLowerCase();
-    filtered = !q ? rawData : rawData.filter(r=>r.some(v=>(v!=null)&&String(v).toLowerCase().includes(q)));
-    renderTable(filtered);
-  }
-  document.getElementById('searchInput').addEventListener('input', ()=>{
-    const el = document.getElementById('searchInput');
-    clearTimeout(el._t); el._t=setTimeout(applyFilter,150);
-  });
-  function parseAndShow(textOrFile, label){
-    setStatus('正在解析 CSV ...');
-    Papa.parse(textOrFile, {
-      header:false, skipEmptyLines:true, dynamicTyping:false, worker:true, encoding:'UTF-8',
-      complete: (res)=>{
-        const rows = res.data||[];
-        if (!rows.length){ setStatus('CSV 空文件或格式异常'); show(tableSection,false); return; }
-        headers = rows[0].map((h,i)=> (h===''||h==null)?('col_'+(i+1)):String(h));
-        rawData = rows.slice(1);
-        filtered = rawData;
-        show(tableSection,true);
-        renderTable(filtered);
-        setStatus(`解析完成（${label}），共 ${rows.length-1} 行`);
+    async function loadMonth(){
+      const y = parseInt(yearSel.value,10);
+      const m = parseInt(monSel.value,10)+1;
+      const path = `./data/${y}-${pad2(m)}.csv`; // ★ 相对路径
+      statusEl.textContent = `请求 ${path} ...`;
+      try{
+        const res = await fetch(`${path}?t=${Date.now()}`, {cache:'no-store'}); // 防缓存
+        if(!res.ok) throw new Error(`HTTP ${res.status} - ${path}`);
+        const text = await res.text();
+        statusEl.textContent = `加载成功：${path}`;
+        preview.textContent = text.slice(0, 2000); // 仅预览前 2000 字符
+      }catch(err){
+        statusEl.textContent = `加载失败：${err.message}（请确认该文件已上传且同源）`;
       }
-    });
-  }
-  document.getElementById('loadMonthBtn').addEventListener('click', async ()=>{
-    const y = parseInt(yearSel.value,10);
-    const m = parseInt(monSel.value,10)+1;
-    const path = `/data/${y}-${pad2(m)}.csv`;
-    try{
-      setStatus(`请求 ${path} ...`);
-      const res = await fetch(path, {cache:'no-store'});
-      if (!res.ok) throw new Error('HTTP '+res.status);
-      const text = await res.text();
-      parseAndShow(text, path);
-    }catch(err){
-      console.error(err);
-      setStatus(`加载失败：${path}（请确认该文件已上传且同源）`);
-      show(tableSection,false);
     }
-  });
-  document.getElementById('fileInput').addEventListener('change', e=>{
-    const f = e.target.files?.[0]; if(!f) return;
-    parseAndShow(f, '本地文件 '+f.name);
-  });
+    document.getElementById('loadMonthBtn').addEventListener('click', loadMonth);
   </script>
 </body>
 </html>

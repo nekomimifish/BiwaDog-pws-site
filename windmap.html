@@ -3,231 +3,68 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Wind Arrows Demo · Lake Biwa</title>
+  <title>Wind Arrows（相对路径修正版）</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <style>
-    :root{
-      --bg:#0b1016; --panel:#111a25; --text:#e9f0fb; --muted:#98a9c2; --accent:#3aa0ff; --border:#1e2a3b;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans";line-height:1.5}
-    header{padding:14px 16px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0f1824,#0b1016)}
-    header h1{margin:0;font-size:18px}
-    header p{margin:4px 0 0;color:var(--muted);font-size:12px}
-    main{max-width:1100px;margin:0 auto;padding:12px}
-    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px;margin:12px 0}
-    #map{height:62vh;border-radius:12px;border:1px solid var(--border);}
-    .toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between}
-    .muted{color:var(--muted);font-size:12px}
-    .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:#0f1824;color:var(--text);cursor:pointer;text-decoration:none}
-    .btn.primary{background:var(--accent);color:#00152e;border-color:transparent}
-    input[type="range"]{width:320px}
-    .pill{border:1px solid var(--border);padding:4px 8px;border-radius:999px;font-size:12px;color:var(--muted)}
-  </style>
+  <style>#map{height:62vh;border:1px solid #1e2a3b;border-radius:12px}</style>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js" defer></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 </head>
 <body>
-  <header>
-    <h1>风向风速箭头（长度 ∝ 风速，指向风去向）</h1>
-    <p>数据来源：/data/YYYY-MM.csv（UTF-8）。滑动时间轴查看不同时间的箭头。</p>
-  </header>
-  <main>
-    <section class="card">
-      <div class="toolbar">
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <label>年份-月份：</label>
-          <select id="yearSel"></select>
-          <select id="monSel"></select>
-          <button id="loadBtn" class="btn primary">加载本月 CSV</button>
-          <span id="status" class="muted"></span>
-        </div>
-        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          <span class="pill" id="tsLabel">时间：—</span>
-          <input id="slider" type="range" min="0" max="0" value="0">
-          <button id="playBtn" class="btn">▶ 播放</button>
-        </div>
-      </div>
-      <div id="map"></div>
-      <div class="muted" style="margin-top:8px">
-        配置在脚本顶部的 CONFIG：坐标、像素/每(m/s)、箭头样式等。风向采用气象学约定（WD 为“来自”方向），箭头指向风去向（WD + 180°）。
-      </div>
-    </section>
-  </main>
+  <h1>风向风速箭头（相对路径版）</h1>
+  <div>
+    <select id="yearSel"></select>
+    <select id="monSel"></select>
+    <button id="loadBtn">加载 ./data/YYYY-MM.csv</button>
+    <span id="status"></span>
+  </div>
+  <div id="map"></div>
+  <script>
+    const map = L.map('map').setView([35.215,135.97],10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap'}).addTo(map);
+    const station = {name:'Shinhama', lat:35.2115, lng:135.9770};
+    let marker = L.marker([station.lat, station.lng]).addTo(map).bindTooltip(station.name);
 
-<script defer>
-// ---- CONFIG ----
-const CONFIG = {
-  center: [35.215, 135.97],   // 琵琶湖中部示例坐标
-  zoom: 10,
-  station: {
-    name: "Shinhama（示例）",
-    lat: 35.2115,   // TODO: 改为你们站点的精确坐标
-    lng: 135.9770
-  },
-  pxPerMs: 8,       // 每 1 m/s 的像素长度
-  minLenPx: 10,     // 最小箭头长度，避免 0 速度太短看不见
-  maxLenPx: 120,    // 限制最大长度以防过长
-  arrow: {
-    stroke: "#ffffff",
-    strokeWidth: 2,
-    headSize: 8     // 箭头三角形边长
-  },
-  columns: {        // CSV 列名（首行表头）
-    time: "Timestamp",
-    wd:   "WD_AV(deg)",
-    ws:   "WS_AV(m/s)"
-  }
-};
+    const now = new Date(); const yearSel=document.getElementById('yearSel'); const monSel=document.getElementById('monSel'); const statusEl=document.getElementById('status');
+    function pad2(n){return String(n).padStart(2,'0')}
+    for(let y=now.getFullYear()-5;y<=now.getFullYear()+2;y++){const o=document.createElement('option');o.value=y;o.textContent=y;if(y===now.getFullYear())o.selected=true;yearSel.appendChild(o);}
+    for(let m=0;m<12;m++){const o=document.createElement('option');o.value=m;o.textContent=(m+1)+' 月';if(m===now.getMonth())o.selected=true;monSel.appendChild(o);}
 
-// ---- Helpers ----
-const $ = (s)=>document.querySelector(s);
-const pad2 = n => String(n).padStart(2,'0');
-function setStatus(t){ $('#status').textContent = t || ''; }
-function bearingToCanvasAngleDeg(bearingDeg){
-  // 地理方位角：0°=北 顺时针 → 画布角度：0°=正x轴, 逆时针
-  // 转换公式：theta = 90 - bearing
-  return 90 - bearingDeg;
-}
-function createArrowDivIcon(speed, wdDeg){
-  const toBearing = (wdDeg + 180) % 360; // 风去向
-  const angle = bearingToCanvasAngleDeg(toBearing); // 转到画布角
-  // 计算箭头像素长度
-  let L = Math.max(CONFIG.minLenPx, CONFIG.pxPerMs * (Number(speed)||0));
-  L = Math.min(L, CONFIG.maxLenPx);
-  const head = CONFIG.arrow.headSize;
-  const stroke = CONFIG.arrow.stroke;
-  const sw = CONFIG.arrow.strokeWidth;
-  const W = L + head + 6, H = L + head + 6;  // 画布包裹
-  const cx = W/2, cy = H/2;
-  // 垂直朝上（-y）绘制一个箭头，再旋转容器
-  const y2 = cy - L; // 尖端
-  const y1 = cy;     // 尾端
-  const tri = [
-    `${cx},${y2}`,
-    `${cx - head*0.7},${y2 + head}`,
-    `${cx + head*0.7},${y2 + head}`
-  ].join(' ');
-  const svg = `
-    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
-      <defs><filter id="s" x="-50%" y="-50%" width="200%" height="200%">
-        <feDropShadow dx="0" dy="1" stdDeviation="1" flood-opacity="0.45"/>
-      </filter></defs>
-      <g filter="url(#s)">
-        <line x1="${cx}" y1="${y1}" x2="${cx}" y2="${y2}" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round"/>
-        <polygon points="${tri}" fill="${stroke}"/>
-      </g>
-    </svg>
-  `.trim();
-  const div = document.createElement('div');
-  div.style.transform = `rotate(${angle}deg)`;
-  div.style.transformOrigin = 'center center';
-  div.innerHTML = svg;
-  return L.divIcon({
-    html: div,
-    className: 'wind-arrow',
-    iconSize: [W, H],
-    iconAnchor: [W/2, H/2]
-  });
-}
+    function bearingToCanvasAngleDeg(b){return 90 - b}
+    function arrowIcon(ws, wd){
+      const to = (wd + 180) % 360;
+      const ang = bearingToCanvasAngleDeg(to);
+      const pxPerMs = 8, minLen=10, maxLen=120;
+      let Lpx = Math.min(Math.max(ws*pxPerMs, minLen), maxLen);
+      const head=8, W=Lpx+head+6, H=Lpx+head+6, cx=W/2, cy=H/2, y2=cy-Lpx, y1=cy;
+      const svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><line x1="${cx}" y1="${y1}" x2="${cx}" y2="${y2}" stroke="#fff" stroke-width="2" stroke-linecap="round"/><polygon points="${cx},${y2} ${cx-6},${y2+8} ${cx+6},${y2+8}" fill="#fff"/></svg>`;
+      return L.divIcon({ html:`<div style="transform:rotate(${ang}deg);transform-origin:center">${svg}</div>`, className:'wind-arrow', iconSize:[W,H], iconAnchor:[W/2,H/2]});
+    }
 
-// ---- Map ----
-let map, arrowMarker;
-function initMap(){
-  map = L.map('map').setView(CONFIG.center, CONFIG.zoom);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18, attribution: '&copy; OpenStreetMap'
-  }).addTo(map);
-  arrowMarker = L.marker([CONFIG.station.lat, CONFIG.station.lng]).addTo(map);
-  L.circleMarker([CONFIG.station.lat, CONFIG.station.lng], {radius:4, color:'#3aa0ff'})
-    .addTo(map).bindTooltip(CONFIG.station.name, {permanent:false});
-}
-document.addEventListener('DOMContentLoaded', initMap);
-
-// ---- CSV Load + Timeline ----
-let rows = []; // parsed rows
-let idx = 0;
-const yearSel = $('#yearSel'); const monSel = $('#monSel');
-const slider = $('#slider'); const tsLabel = $('#tsLabel');
-function populateYM(){
-  const now = new Date();
-  yearSel.innerHTML='';
-  for(let y=now.getFullYear()-5; y<=now.getFullYear()+2; y++){
-    const o = document.createElement('option'); o.value=String(y); o.textContent=String(y);
-    if(y===now.getFullYear()) o.selected = true;
-    yearSel.appendChild(o);
-  }
-  monSel.innerHTML='';
-  for(let m=0;m<12;m++){
-    const o = document.createElement('option'); o.value=String(m); o.textContent=(m+1)+' 月';
-    if(m===now.getMonth()) o.selected = true;
-    monSel.appendChild(o);
-  }
-}
-populateYM();
-
-function updateArrow(){
-  if (!rows.length) return;
-  const r = rows[idx];
-  const ts = r[CONFIG.columns.time];
-  const wd = parseFloat(r[CONFIG.columns.wd]);
-  const ws = parseFloat(r[CONFIG.columns.ws]);
-  tsLabel.textContent = `时间：${ts} | WD=${isFinite(wd)?wd:'—'}° | WS=${isFinite(ws)?ws:'—'} m/s`;
-  const icon = createArrowDivIcon(ws, isFinite(wd)?wd:0);
-  arrowMarker.setIcon(icon);
-}
-
-async function loadMonth(){
-  const y = parseInt(yearSel.value,10);
-  const m = parseInt(monSel.value,10)+1; // 1-12
-  const path = `/data/${y}-${pad2(m)}.csv`;
-  setStatus(`加载 ${path} ...`);
-  try{
-    const res = await fetch(path, {cache:'no-store'});
-    if (!res.ok) throw new Error('HTTP '+res.status);
-    const text = await res.text();
-    Papa.parse(text, {
-      header:true, skipEmptyLines:true, dynamicTyping:false,
-      complete: (parsed)=>{
-        rows = parsed.data || [];
-        if (!rows.length) { setStatus('CSV 为空'); return; }
-        idx = 0;
-        slider.min = 0; slider.max = Math.max(0, rows.length-1); slider.value = 0;
-        setStatus(`加载成功：${rows.length} 条记录`);
-        updateArrow();
+    let rows=[]; let idx=0;
+    async function loadMonth(){
+      const y = parseInt(yearSel.value,10);
+      const m = parseInt(monSel.value,10)+1;
+      const path = `./data/${y}-${pad2(m)}.csv`; // ★ 相对路径
+      statusEl.textContent = `请求 ${path} ...`;
+      try{
+        const res = await fetch(`${path}?t=${Date.now()}`, {cache:'no-store'});
+        if(!res.ok) throw new Error(`HTTP ${res.status} - ${path}`);
+        const text = await res.text();
+        Papa.parse(text, {header:true, skipEmptyLines:true, complete:(p)=>{
+          rows = p.data || [];
+          if(!rows.length){ statusEl.textContent='CSV 为空'; return; }
+          idx = 0;
+          // 取第一行的 WD / WS 字段名（或按你的列名修改）
+          const WD = 'WD_AV(deg)'; const WS = 'WS_AV(m/s)';
+          const wd = parseFloat(rows[idx][WD]); const ws = parseFloat(rows[idx][WS]);
+          marker.setIcon(arrowIcon(isFinite(ws)?ws:0, isFinite(wd)?wd:0));
+          statusEl.textContent = `加载成功：${rows.length} 条记录`;
+        }});
+      }catch(err){
+        statusEl.textContent = `加载失败：${err.message}（请确认该文件已上传且同源）`;
       }
-    });
-  }catch(e){
-    console.error(e);
-    setStatus('加载失败：' + e.message);
-  }
-}
-document.addEventListener('DOMContentLoaded', ()=>{
-  $('#loadBtn').addEventListener('click', loadMonth);
-  slider.addEventListener('input', ()=>{ idx = parseInt(slider.value,10); updateArrow(); });
-});
-
-// ---- Simple playback ----
-let timer=null, playing=false;
-function tick(){
-  if (!rows.length) return;
-  idx = Math.min(rows.length-1, idx+1);
-  slider.value = idx;
-  updateArrow();
-  if (idx >= rows.length-1){ togglePlay(); }
-}
-function togglePlay(){
-  playing = !playing;
-  $('#playBtn').textContent = playing ? '⏸ 暂停' : '▶ 播放';
-  if (playing){
-    timer = setInterval(tick, 600); // 0.6s/step
-  } else {
-    clearInterval(timer); timer=null;
-  }
-}
-document.addEventListener('DOMContentLoaded', ()=>{
-  $('#playBtn').addEventListener('click', togglePlay);
-});
-</script>
+    }
+    document.getElementById('loadBtn').addEventListener('click', loadMonth);
+  </script>
 </body>
 </html>
