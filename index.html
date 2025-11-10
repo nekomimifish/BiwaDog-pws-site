@@ -1,60 +1,255 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>琵琶湖风 · PWS（相对路径修正版）</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PWS 月度数据 · Excel风格表格</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://unpkg.com">
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
-    #heroMap{height:56vh;min-height:360px;border-radius:14px;border:1px solid #1e2a3b}
+    :root{
+      --bg: #ffffff;           /* 背景（Excel 风格） */
+      --text: #0b1625;
+      --muted:#5b6b82;
+      --panel:#ffffff;
+      --grid:#e5e9f2;
+      --header:#f4f6fb;
+      --accent:#1677ff;
+      --hover:#eef4ff;
+      --sticky:#f8fbff;
+    }
+    .dark{
+      --bg:#0b1016;
+      --text:#ecf2ff;
+      --muted:#9fb1cc;
+      --panel:#101822;
+      --grid:#1f2a3a;
+      --header:#0f1824;
+      --accent:#3aa0ff;
+      --hover:#13283f;
+      --sticky:#112033;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans JP","Noto Sans SC";}
+    header{padding:14px 16px;border-bottom:1px solid var(--grid);display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--panel);position:sticky;top:0;z-index:10}
+    header h1{margin:0;font-size:18px;font-weight:600}
+    .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    select, input[type="number"], input[type="text"]{padding:8px 10px;border:1px solid var(--grid);border-radius:8px;background:var(--panel);color:var(--text)}
+    button{padding:8px 12px;border-radius:8px;border:1px solid var(--grid);background:var(--panel);color:var(--text);cursor:pointer}
+    button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+    button.ghost{background:transparent}
+    main{max-width:1200px;margin:0 auto;padding:14px}
+    .status{font-size:12px;color:var(--muted);margin-top:6px}
+    .table-wrap{border:1px solid var(--grid);border-radius:10px;overflow:auto;max-height:72vh;background:var(--panel)}
+    table{width:100%;border-collapse:separate;border-spacing:0;font-size:14px}
+    thead th{position:sticky;top:0;background:var(--header);z-index:2;border-bottom:1px solid var(--grid);text-align:left;padding:10px;white-space:nowrap}
+    thead th.sortable{cursor:pointer}
+    thead th .arrow{margin-left:6px;opacity:.65}
+    tbody td{border-bottom:1px solid var(--grid);border-right:1px solid var(--grid);padding:8px;vertical-align:top;background:var(--panel)}
+    tbody tr:nth-child(odd) td{background:linear-gradient(var(--panel), var(--panel)) padding-box, linear-gradient(var(--panel), var(--panel)) border-box}
+    tbody tr:hover td{background:var(--hover)}
+    /* 冻结第一列 */
+    thead th.sticky-first, tbody td.sticky-first{
+      position: sticky; left: 0; z-index: 1; background: var(--sticky); border-right:1px solid var(--grid);
+    }
+    thead th.sticky-first{z-index:3}
+    /* 顶部工具条块 */
+    .card{background:var(--panel);border:1px solid var(--grid);border-radius:10px;padding:10px;margin:12px 0}
+    .spacer{flex:1}
+    .pill{font-size:12px;color:var(--muted);padding:4px 8px;border:1px solid var(--grid);border-radius:999px}
+    .hide{display:none!important}
   </style>
 </head>
 <body>
+  <header>
+    <h1>PWS 月度数据 · Excel风格</h1>
+    <div class="toolbar">
+      <label>年份</label><select id="yearSel"></select>
+      <label>月份</label><select id="monSel"></select>
+      <button id="loadBtn" class="primary">加载 ./data/YYYY-MM.csv</button>
+      <span id="status" class="status"></span>
+      <div class="spacer"></div>
+      <button id="themeBtn" class="ghost">切换深色/浅色</button>
+    </div>
+  </header>
+
   <main>
-    <section>
-      <div id="heroMap"></div>
-    </section>
-    <section>
-      <select id="yearSel"></select>
-      <select id="monSel"></select>
-      <button id="loadMonthBtn">查看本月数据（./data/YYYY-MM.csv）</button>
-      <div id="status"></div>
-      <pre id="preview" style="max-height:40vh;overflow:auto;border:1px solid #1e2a3b;padding:8px"></pre>
-    </section>
+    <div class="card toolbar">
+      <label>搜索</label><input id="searchInput" type="text" placeholder="按任意关键词过滤（支持多列）" style="min-width:280px">
+      <label>每页</label><input id="pageSize" type="number" value="200" min="50" max="2000" step="50" style="width:90px">
+      <button id="exportBtn">导出当前筛选为 CSV</button>
+      <span id="meta" class="pill"></span>
+    </div>
+
+    <div class="table-wrap">
+      <table id="grid">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="card toolbar" style="justify-content:space-between">
+      <div>
+        <button id="prevBtn">上一页</button>
+        <button id="nextBtn">下一页</button>
+      </div>
+      <div class="pill" id="pageInfo">第 0 / 0 页</div>
+    </div>
   </main>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
   <script>
-    // Leaflet 基本初始化
-    const map = L.map('heroMap').setView([35.215,135.97], 10);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap'}).addTo(map);
-    L.marker([35.2115,135.9770]).addTo(map).bindTooltip('Shinhama（示例）');
+    // ===== 基础工具 =====
+    const $ = s => document.querySelector(s);
+    const pad2 = n => String(n).padStart(2,'0');
+    function setStatus(t){ $('#status').textContent = t || ''; }
+    function escapeHTML(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+    function toCSV(rows){ return rows.map(r => r.map(cell => {
+      const str = (cell==null)?'':String(cell);
+      return /[",\n]/.test(str) ? '"'+str.replace(/"/g,'""')+'"' : str;
+    }).join(',')).join('\n'); }
 
-    // 月份选择器 + 相对路径加载 CSV
-    const yearSel = document.getElementById('yearSel');
-    const monSel = document.getElementById('monSel');
-    const statusEl = document.getElementById('status');
-    const preview = document.getElementById('preview');
-    const now = new Date();
-    function pad2(n){return String(n).padStart(2,'0')}
-    for(let y=now.getFullYear()-5;y<=now.getFullYear()+2;y++){const o=document.createElement('option');o.value=y;o.textContent=y;if(y===now.getFullYear())o.selected=true;yearSel.appendChild(o);}
-    for(let m=0;m<12;m++){const o=document.createElement('option');o.value=m;o.textContent=(m+1)+' 月';if(m===now.getMonth())o.selected=true;monSel.appendChild(o);}
+    // ===== 主题切换（默认浅色 Excel 风格） =====
+    const themeBtn = $('#themeBtn');
+    themeBtn.addEventListener('click', () => {
+      document.body.classList.toggle('dark');
+      themeBtn.textContent = document.body.classList.contains('dark') ? '切换为浅色' : '切换深色/浅色';
+    });
 
-    async function loadMonth(){
-      const y = parseInt(yearSel.value,10);
-      const m = parseInt(monSel.value,10)+1;
-      const path = `./data/${y}-${pad2(m)}.csv`; // ★ 相对路径
-      statusEl.textContent = `请求 ${path} ...`;
+    // ===== 年月选择 =====
+    const yearSel = $('#yearSel'), monSel = $('#monSel');
+    (function initYM(){
+      const now = new Date();
+      for(let y=now.getFullYear()-5; y<=now.getFullYear()+2; y++){
+        const o = document.createElement('option'); o.value=y; o.textContent=y; if(y===now.getFullYear()) o.selected=true; yearSel.appendChild(o);
+      }
+      for(let m=0; m<12; m++){
+        const o = document.createElement('option'); o.value=m; o.textContent=(m+1)+' 月'; if(m===now.getMonth()) o.selected=true; monSel.appendChild(o);
+      }
+    })();
+
+    // ===== 数据状态 =====
+    let headers = [];           // 列名数组
+    let dataRows = [];          // 原始数据（二维数组）
+    let filteredRows = [];      // 过滤后
+    let sortInfo = { index: -1, dir: 1 }; // 排序状态
+    let page = 1;               // 当前页
+    let pageSize = parseInt($('#pageSize').value, 10) || 200;
+
+    // ===== 渲染表头和表体 =====
+    function renderTable(){
+      const thead = $('#grid thead');
+      const tbody = $('#grid tbody');
+      // 表头
+      thead.innerHTML = '<tr>' + headers.map((h,i) => {
+        const arrow = (sortInfo.index===i) ? (sortInfo.dir>0?'▲':'▼') : '';
+        return `<th class="${i===0?'sticky-first ':''}sortable" data-idx="${i}">${escapeHTML(h)} <span class="arrow">${arrow}</span></th>`;
+      }).join('') + '</tr>';
+
+      // 绑定排序点击
+      thead.querySelectorAll('th.sortable').forEach(th => {
+        th.addEventListener('click', () => {
+          const i = parseInt(th.dataset.idx,10);
+          // 切换排序
+          if(sortInfo.index === i){ sortInfo.dir *= -1; } else { sortInfo.index = i; sortInfo.dir = 1; }
+          sortRows(); page = 1; renderTable(); renderBody();
+        });
+      });
+
+      renderBody();
+    }
+
+    function renderBody(){
+      const tbody = $('#grid tbody');
+      pageSize = parseInt($('#pageSize').value, 10) || 200;
+      const total = filteredRows.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      if(page > totalPages) page = totalPages;
+      const start = (page-1)*pageSize;
+      const slice = filteredRows.slice(start, start + pageSize);
+
+      tbody.innerHTML = slice.map(row => {
+        return '<tr>' + row.map((cell,i) => `<td class="${i===0?'sticky-first':''}">${escapeHTML(cell==null?'':cell)}</td>`).join('') + '</tr>';
+      }).join('');
+
+      $('#pageInfo').textContent = `第 ${page} / ${totalPages} 页（共 ${total.toLocaleString()} 行，当前每页 ${pageSize} 行）`;
+      $('#meta').textContent = `已加载 ${total.toLocaleString()} 行 | 列数 ${headers.length}`;
+    }
+
+    // ===== 过滤和排序 =====
+    function applyFilter(){
+      const q = $('#searchInput').value.trim().toLowerCase();
+      filteredRows = !q ? dataRows :
+        dataRows.filter(r => r.some(v => (v!=null) && String(v).toLowerCase().includes(q)));
+      sortRows();
+      page = 1;
+      renderTable();
+    }
+    function sortRows(){
+      if(sortInfo.index < 0){ return; }
+      const i = sortInfo.index, d = sortInfo.dir;
+      filteredRows.sort((a,b) => {
+        const A = a[i]==null ? '' : a[i];
+        const B = b[i]==null ? '' : b[i];
+        const nA = parseFloat(A), nB = parseFloat(B);
+        const bothNum = isFinite(nA) && isFinite(nB);
+        if(bothNum){ return (nA - nB) * d; }
+        return String(A).localeCompare(String(B)) * d;
+      });
+    }
+    $('#searchInput').addEventListener('input', () => {
+      clearTimeout(window._t); window._t = setTimeout(applyFilter, 150);
+    });
+    $('#pageSize').addEventListener('change', () => { page = 1; renderBody(); });
+    $('#prevBtn').addEventListener('click', () => { if(page>1){ page--; renderBody(); } });
+    $('#nextBtn').addEventListener('click', () => { const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize)); if(page<totalPages){ page++; renderBody(); } });
+
+    // ===== 导出当前筛选 =====
+    $('#exportBtn').addEventListener('click', () => {
+      const csv = toCSV([headers, ...filteredRows]);
+      const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'filtered.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // ===== 加载 CSV（相对路径 & 防缓存） =====
+    async function loadCSV(){
+      const y = parseInt(yearSel.value, 10);
+      const m = parseInt(monSel.value, 10) + 1;
+      const path = `./data/${y}-${pad2(m)}.csv`;
+      setStatus(`请求 ${path} ...`);
       try{
-        const res = await fetch(`${path}?t=${Date.now()}`, {cache:'no-store'}); // 防缓存
+        const res = await fetch(`${path}?t=${Date.now()}`, {cache:'no-store'});
         if(!res.ok) throw new Error(`HTTP ${res.status} - ${path}`);
         const text = await res.text();
-        statusEl.textContent = `加载成功：${path}`;
-        preview.textContent = text.slice(0, 2000); // 仅预览前 2000 字符
+        // 解析：允许首行表头
+        Papa.parse(text, {
+          header: true, skipEmptyLines: true, dynamicTyping: false,
+          complete: (parsed) => {
+            const rows = parsed.data || [];
+            if(!rows.length){ setStatus('CSV 为空'); return; }
+            headers = Object.keys(rows[0]);
+            dataRows = rows.map(r => headers.map(h => r[h]));
+            filteredRows = dataRows.slice();
+            sortInfo = { index: -1, dir: 1 };
+            page = 1;
+            setStatus(`加载成功：${rows.length} 行 · ${headers.length} 列`);
+            renderTable();
+          },
+          error: (err) => {
+            setStatus('解析失败：' + err.message);
+          }
+        });
       }catch(err){
-        statusEl.textContent = `加载失败：${err.message}（请确认该文件已上传且同源）`;
+        console.error(err);
+        setStatus(`加载失败：${err.message}（请确认该文件已上传且同源）`);
       }
     }
-    document.getElementById('loadMonthBtn').addEventListener('click', loadMonth);
+    $('#loadBtn').addEventListener('click', loadCSV);
   </script>
 </body>
 </html>
