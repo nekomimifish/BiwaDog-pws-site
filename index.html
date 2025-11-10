@@ -3,9 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PWS 地图 + Excel表格（新海浜坐标版）</title>
-  <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="preconnect" href="https://unpkg.com">
+  <title>PWS 地图在上 + Excel表格在下（新海浜坐标版）</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -27,14 +25,11 @@
     button{padding:8px 12px;border-radius:8px;border:1px solid var(--grid);background:var(--panel);color:var(--text);cursor:pointer}
     button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
     button.ghost{background:transparent}
-    main{max-width:1400px;margin:0 auto;padding:14px}
-    .layout{display:grid;grid-template-columns: 1fr 1.2fr;gap:14px}
-    @media (max-width: 1100px){ .layout{grid-template-columns:1fr} }
+    main{max-width:1200px;margin:0 auto;padding:14px;display:flex;flex-direction:column;gap:14px}
     .card{background:var(--panel);border:1px solid var(--grid);border-radius:12px;padding:10px}
-    #map{height:62vh;min-height:360px;border-radius:10px}
+    #map{height:56vh;min-height:320px;border-radius:10px}
     .status{font-size:12px;color:var(--muted);margin-left:8px}
-    /* 表格样式（Excel风格） */
-    .table-wrap{border:1px solid var(--grid);border-radius:10px;overflow:auto;max-height:72vh;background:var(--panel)}
+    .table-wrap{border:1px solid var(--grid);border-radius:10px;overflow:auto;max-height:70vh;background:var(--panel)}
     table{width:100%;border-collapse:separate;border-spacing:0;font-size:14px}
     thead th{position:sticky;top:0;background:var(--header);z-index:2;border-bottom:1px solid var(--grid);text-align:left;padding:10px;white-space:nowrap}
     thead th.sortable{cursor:pointer}
@@ -49,7 +44,7 @@
 </head>
 <body>
   <header>
-    <h1>PWS 地图 + Excel表格（新海浜坐标版）</h1>
+    <h1>PWS 地图在上 + Excel表格在下</h1>
     <div class="toolbar">
       <label>年份</label><select id="yearSel"></select>
       <label>月份</label><select id="monSel"></select>
@@ -60,28 +55,23 @@
     </div>
   </header>
 
-  <main class="layout">
-    <!-- 左：地图 -->
+  <main>
     <section class="card">
       <div id="map"></div>
-      <div class="status" id="mapNote">提示：地图使用 Leaflet，标注为你提供的新海浜风速计位置</div>
+      <div class="status">坐标：新海浜（35.21622, 136.11864）</div>
     </section>
 
-    <!-- 右：Excel 风格表格 + 工具条 -->
-    <section>
-      <div class="card toolbar" style="margin-bottom:10px">
+    <section class="card">
+      <div class="toolbar" style="margin-bottom:10px">
         <label>搜索</label><input id="searchInput" type="text" placeholder="按任意关键词过滤（支持多列）" style="min-width:280px">
         <label>每页</label><input id="pageSize" type="number" value="200" min="50" max="2000" step="50" style="width:90px">
         <button id="exportBtn">导出当前筛选为 CSV</button>
         <span id="meta" class="pill"></span>
       </div>
-      <div class="table-wrap card">
-        <table id="grid">
-          <thead></thead>
-          <tbody></tbody>
-        </table>
+      <div class="table-wrap">
+        <table id="grid"><thead></thead><tbody></tbody></table>
       </div>
-      <div class="card toolbar" style="justify-content:space-between;margin-top:10px">
+      <div class="toolbar" style="justify-content:space-between;margin-top:10px">
         <div><button id="prevBtn">上一页</button> <button id="nextBtn">下一页</button></div>
         <div class="pill" id="pageInfo">第 0 / 0 页</div>
       </div>
@@ -89,28 +79,22 @@
   </main>
 
   <script>
-    // ======= 配置：使用你提供的真实坐标 =======
     const CONFIG = {
       station: { name:'Shinhama 风速计（新海浜）', lat:35.21622, lng:136.11864 },
       mapCenter: [35.21622, 136.11864],
       mapZoom: 12
     };
 
-    // ======= 主题切换（默认浅色） =======
     const themeBtn = document.getElementById('themeBtn');
     themeBtn.addEventListener('click', () => {
       document.body.classList.toggle('dark');
       themeBtn.textContent = document.body.classList.contains('dark') ? '切换为浅色' : '切换深色/浅色';
     });
 
-    // ======= Leaflet 地图 =======
     const map = L.map('map').setView(CONFIG.mapCenter, CONFIG.mapZoom);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '&copy; OpenStreetMap'
-    }).addTo(map);
-    const marker = L.marker([CONFIG.station.lat, CONFIG.station.lng]).addTo(map).bindPopup(CONFIG.station.name);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; OpenStreetMap'}).addTo(map);
+    L.marker([CONFIG.station.lat, CONFIG.station.lng]).addTo(map).bindPopup(CONFIG.station.name).openPopup();
 
-    // ======= 年月选择 =======
     const yearSel = document.getElementById('yearSel');
     const monSel = document.getElementById('monSel');
     (function initYM(){
@@ -123,18 +107,16 @@
       }
     })();
 
-    // ======= 状态与工具 =======
     const statusEl = document.getElementById('status');
     const $ = s => document.querySelector(s);
     const pad2 = n => String(n).padStart(2,'0');
     function setStatus(t){ statusEl.textContent = t || ''; }
-    function escapeHTML(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+    function escapeHTML(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]); }
     function toCSV(rows){ return rows.map(r => r.map(cell => {
       const str = (cell==null)?'':String(cell);
       return /[",\n]/.test(str) ? '"'+str.replace(/"/g,'""')+'"' : str;
     }).join(',')).join('\n'); }
 
-    // ======= 表格数据状态 =======
     let headers = [];
     let dataRows = [];
     let filteredRows = [];
@@ -142,10 +124,8 @@
     let page = 1;
     let pageSize = 200;
 
-    // ======= 渲染表格 =======
     function renderTable(){
       const thead = document.querySelector('#grid thead');
-      const tbody = document.querySelector('#grid tbody');
       thead.innerHTML = '<tr>' + headers.map((h,i) => {
         const arrow = (sortInfo.index===i) ? (sortInfo.dir>0?'▲':'▼') : '';
         return `<th class="${i===0?'sticky-first ':''}sortable" data-idx="${i}">${escapeHTML(h)} <span class="arrow">${arrow}</span></th>`;
@@ -194,7 +174,6 @@
     document.getElementById('prevBtn').addEventListener('click', ()=>{ if(page>1){ page--; renderBody(); } });
     document.getElementById('nextBtn').addEventListener('click', ()=>{ const totalPages=Math.max(1,Math.ceil(filteredRows.length/pageSize)); if(page<totalPages){ page++; renderBody(); } });
 
-    // ======= 导出当前筛选 =======
     document.getElementById('exportBtn').addEventListener('click', () => {
       const csv = toCSV([headers, ...filteredRows]);
       const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
@@ -203,7 +182,6 @@
       URL.revokeObjectURL(url);
     });
 
-    // ======= 加载 CSV（相对路径 & 防缓存） =======
     async function loadCSV(){
       const y = parseInt(yearSel.value,10);
       const m = parseInt(monSel.value,10)+1;
@@ -235,14 +213,5 @@
     }
     document.getElementById('loadBtn').addEventListener('click', loadCSV);
   </script>
-
-  <!-- 右侧工具条 & 表格容器（与脚本中的选择器匹配） -->
-  <div style="position:fixed;left:-9999px;top:-9999px" aria-hidden="true">
-    <input id="searchInput" />
-    <input id="pageSize" />
-    <div id="pageInfo"></div>
-    <div id="meta"></div>
-    <table id="grid"><thead></thead><tbody></tbody></table>
-  </div>
 </body>
 </html>
