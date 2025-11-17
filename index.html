@@ -23,13 +23,16 @@
     header{padding:12px 14px;border-bottom:1px solid var(--grid);display:flex;gap:12px;align-items:center;justify-content:space-between;background:var(--panel);position:sticky;top:0;z-index:10}
     header h1{margin:0;font-size:18px}
     .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    select, input[type="number"], input[type="text"]{padding:8px 10px;border:1px solid var(--grid);border-radius:8px;background:var(--panel);color:var(--text)}
+    select, input[type="number"], input[type="text"]{padding:8px 10px;border:1px solid var(--grid);border-radius:8px;background:var(--panel);color:var(--text")}
     button{padding:8px 12px;border-radius:8px;border:1px solid var(--grid);background:var(--panel);color:var(--text);cursor:pointer}
     button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
     button.ghost{background:transparent}
     main{max-width:1400px;margin:0 auto;padding:14px}
     .layout{display:grid;grid-template-columns: 1fr 1.2fr;gap:14px}
-    @media (max-width: 1100px){ .layout{grid-template-columns:1fr} }
+    /* 在 屏幕宽度 ≤ 2560px 时，保持上下结构（地图在上、表格在下） */
+    @media (max-width: 2560px){
+      .layout{grid-template-columns:1fr}
+    }
     .card{background:var(--panel);border:1px solid var(--grid);border-radius:12px;padding:10px}
     #map{height:62vh;min-height:360px;border-radius:10px}
     .status{font-size:12px;color:var(--muted);margin-left:8px}
@@ -45,6 +48,21 @@
     thead th.sticky-first{z-index:3}
     .pill{font-size:12px;color:var(--muted);padding:4px 8px;border:1px solid var(--grid);border-radius:999px}
     .spacer{flex:1}
+
+    /* ===== 风速方向箭头样式（参考 BASwind 风格） ===== */
+    .wind-arrow-icon{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:var(--accent);
+      filter:drop-shadow(0 0 4px rgba(0,0,0,.35));
+    }
+    .dark .wind-arrow-icon{
+      color:#3aa0ff;
+    }
+    .wind-arrow-icon svg{
+      display:block;
+    }
   </style>
 </head>
 <body>
@@ -61,13 +79,15 @@
   </header>
 
   <main class="layout">
-    <!-- 左：地图 -->
+    <!-- 上：地图（≤2560px 时在上方） -->
     <section class="card">
       <div id="map"></div>
-      <div class="status" id="mapNote">提示：地图使用 Leaflet，标注为你提供的新海浜风速计位置</div>
+      <div class="status" id="mapNote">
+        提示：地图使用 Leaflet，标注为你提供的新海浜风速计位置；加载 CSV 后，会在此位置显示最新一条观测的风速方向箭头
+      </div>
     </section>
 
-    <!-- 右：Excel 风格表格 + 工具条 -->
+    <!-- 下：Excel 风格表格 + 工具条 -->
     <section>
       <div class="card toolbar" style="margin-bottom:10px">
         <label>搜索</label><input id="searchInput" type="text" placeholder="按任意关键词过滤（支持多列）" style="min-width:280px">
@@ -96,15 +116,6 @@
       mapZoom: 12
     };
 
-    // ======= 风向 / 风速列名（请按你的 CSV 表头调整） =======
-    const WIND_FIELDS = {
-      dir: 'WD_AV(deg)',    // 风向列名，例如 WD_AV(deg)、WD 等
-      speed: 'WS_AV(m/s)'   // 风速列名，例如 WS_AV(m/s)、WS 等
-    };
-
-    // 所有风向箭头绘制在同一个图层，方便清除和重绘
-    const arrowLayer = L.layerGroup();
-
     // ======= 主题切换（默认浅色） =======
     const themeBtn = document.getElementById('themeBtn');
     themeBtn.addEventListener('click', () => {
@@ -118,6 +129,88 @@
       maxZoom: 19, attribution: '&copy; OpenStreetMap'
     }).addTo(map);
     const marker = L.marker([CONFIG.station.lat, CONFIG.station.lng]).addTo(map).bindPopup(CONFIG.station.name);
+
+    // 用于保存风速方向箭头的 marker
+    let windArrowMarker = null;
+
+    /**
+     * 从 CSV 原始行（对象数组）中，取最后一行，绘制风速方向箭头
+     * 默认尝试找：
+     *   - 风向：包含 "WD" 或 "dir" 的列（优先 WD_AV(deg)）
+     *   - 风速：包含 "WS" 或 "spd" / "speed" 的列（优先 WS_AV(m/s)）
+     * 如果你的列名不同，可以在这里手动指定。
+     */
+    function updateWindArrowFromRows(rows){
+      if (!rows || !rows.length) return;
+
+      const last = rows[rows.length - 1];
+
+      // 自动检测列名（带一点容错）
+      const keys = Object.keys(last);
+      const findKey = (patterns, fallback) =>
+        keys.find(k => patterns.some(p => p.test(k))) || fallback;
+
+      const dirKey = findKey([/wd/i, /dir/i], 'WD_AV(deg)');
+      const spdKey = findKey([/ws/i, /spd/i, /speed/i], 'WS_AV(m/s)');
+
+      const dirRaw = last[dirKey];
+      const spdRaw = last[spdKey];
+      const dir = parseFloat(dirRaw);
+      const spd = parseFloat(spdRaw);
+
+      if (!isFinite(dir) || !isFinite(spd)) {
+        console.warn('无法从 CSV 中解析风向/风速：', { dirKey, spdKey, dirRaw, spdRaw });
+        return;
+      }
+
+      // 删除旧的箭头
+      if (windArrowMarker) {
+        map.removeLayer(windArrowMarker);
+        windArrowMarker = null;
+      }
+
+      // 箭头大小随风速变化（m/s），上限适当限制
+      const clamped = Math.max(0, Math.min(spd, 15)); // 0~15 m/s
+      const size = 30 + clamped * 2; // 基础 30px + 每 m/s 加 2px
+
+      // 这里假设 dir 为「从该方向吹来」的气象角度（0°=北风），
+      // 如果你想让箭头朝风吹去的方向，可以改为 (dir + 180) % 360。
+      const arrowRotation = dir;
+
+      const arrowHTML = `
+        <div class="wind-arrow-icon"
+             title="风速 ${spd.toFixed(1)} m/s, 风向 ${dir.toFixed(0)}° (${dirKey}, ${spdKey})">
+          <svg width="${size}" height="${size}" viewBox="0 0 40 40">
+            <g transform="translate(20,20) rotate(${arrowRotation})">
+              <!-- 主体箭杆 -->
+              <line x1="-12" y1="0" x2="12" y2="0"
+                    stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" />
+              <!-- 箭头 -->
+              <polygon points="12,0 3,-4 3,4" fill="currentColor" />
+              <!-- 反向小尾巴，稍微接近 BASwind 的感觉 -->
+              <line x1="-12" y1="0" x2="-6" y2="0"
+                    stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" opacity="0.5" />
+            </g>
+          </svg>
+        </div>
+      `;
+
+      const icon = L.divIcon({
+        className: 'wind-arrow-icon',
+        html: arrowHTML,
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2]
+      });
+
+      windArrowMarker = L.marker(
+        [CONFIG.station.lat, CONFIG.station.lng],
+        { icon }
+      ).addTo(map).bindPopup(
+        `${CONFIG.station.name}<br>风速：${spd.toFixed(1)} m/s<br>风向：${dir.toFixed(0)}°`
+      );
+    }
 
     // ======= 年月选择 =======
     const yearSel = document.getElementById('yearSel');
@@ -213,51 +306,7 @@
     });
 
     // ======= 加载 CSV（相对路径 & 防缓存） =======
-    
-    // ======= 根据 CSV 数据在地图上绘制风向 / 风速箭头 =======
-    function updateWindArrows(rows){
-      arrowLayer.clearLayers();
-      if(!rows || !rows.length){
-        return;
-      }
-      const dirKey = WIND_FIELDS.dir;
-      const spdKey = WIND_FIELDS.speed;
-
-      if(!(dirKey in rows[0]) || !(spdKey in rows[0])){
-        console.warn('找不到风向/风速列，请检查 WIND_FIELDS 设置是否和 CSV 表头一致');
-        return;
-      }
-
-      const baseLat = CONFIG.station.lat;
-      const baseLng = CONFIG.station.lng;
-      const maxArrows = Math.min(12, rows.length);
-      const subset = rows.slice(-maxArrows); // 最近几条数据
-
-      subset.forEach((row, idx) => {
-        const dirDeg = parseFloat(row[dirKey]);
-        const speed  = parseFloat(row[spdKey]);
-        if(!isFinite(dirDeg) || !isFinite(speed)) return;
-
-        // 简单把风速映射为箭头长度（单位约 km，系数可根据视觉效果调整）
-        const lenKm = Math.max(0.2, speed * 0.15);
-
-        // 把气象角度（来向）简单当成去向使用；如需严格转换可再微调
-        const rad = (dirDeg - 90) * Math.PI / 180;
-
-        const dLat = (lenKm * Math.sin(rad)) / 111; // 1°纬度 ≈ 111 km
-        const dLng = (lenKm * Math.cos(rad)) / (111 * Math.cos(baseLat * Math.PI/180));
-
-        const startLat = baseLat;
-        const startLng = baseLng;
-        const endLat   = baseLat + dLat;
-        const endLng   = baseLng + dLng;
-
-        const line = L.polyline([[startLat, startLng], [endLat, endLng]], {weight: 2});
-        line.addTo(arrowLayer);
-      });
-    }
-
-async function loadCSV(){
+    async function loadCSV(){
       const y = parseInt(yearSel.value,10);
       const m = parseInt(monSel.value,10)+1;
       const path = `./data/${String(y)}-${String(m).padStart(2,'0')}.csv`;
@@ -277,12 +326,11 @@ async function loadCSV(){
             sortInfo = { index:-1, dir:1 };
             page = 1;
             setStatus(`加载成功：${rows.length} 行 · ${headers.length} 列`);
+
+            // 1) 更新表格
             renderTable();
-            try {
-              updateWindArrows(rows);
-            } catch(e) {
-              console.error('绘制风向箭头时出错', e);
-            }
+            // 2) 使用最新一条观测更新地图上的风速方向箭头
+            updateWindArrowFromRows(rows);
           },
           error: (err)=> setStatus('解析失败：'+err.message)
         });
