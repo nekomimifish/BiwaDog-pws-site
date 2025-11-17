@@ -218,11 +218,10 @@
       mapZoom: 12,
     };
 
-    // ⚠️ 根据你的 CSV 表头修改列名
-    // 你给的 2025-10.csv 表头里是： "WD_AV (deg)", "WS_AV (m/s)"
+    // 你的 2025-10.csv 表头里的风向/风速列名（带空格）
     const WIND_FIELDS = {
-      dir: "WD_AV (deg)",    // 风向列名（带空格）
-      speed: "WS_AV (m/s)",  // 风速列名（带空格）
+      dir: "WD_AV (deg)",    // 风向列名
+      speed: "WS_AV (m/s)",  // 风速列名
     };
 
     const statusEl = document.getElementById("status");
@@ -232,7 +231,11 @@
     const tableHead = document.getElementById("table-head");
     const tableBody = document.getElementById("table-body");
 
-    let rawRows = []; // 原始 CSV 行
+    let rawRows = [];    // 原始 CSV 行（对象数组）
+    let animRows = [];   // 用于动画的行
+    let animIndex = 0;   // 当前播放到第几条
+    let animTimer = null;
+    const ANIM_INTERVAL = 1000; // 每帧间隔（毫秒），1000=1秒
 
     function setStatus(msg) {
       statusEl.textContent = msg || "";
@@ -260,7 +263,7 @@
       .bindPopup(CONFIG.station.name)
       .openPopup();
 
-    // 箭头图层
+    // 箭头图层（只显示一个箭头）
     const arrowLayer = L.layerGroup().addTo(map);
 
     // ========= 年月下拉 =========
@@ -305,13 +308,14 @@
               setStatus("CSV 为空");
               rawRows = [];
               renderTable([]);
+              stopWindAnimation();
               arrowLayer.clearLayers();
               return;
             }
             rawRows = rows;
             setStatus(`加载成功：${rows.length} 行 · ${Object.keys(rows[0]).length} 列`);
             renderTable(rows);
-            updateWindArrows(rows);
+            startWindAnimation(rows);   // 加载完成后启动动画
           },
           error: (err) => {
             setStatus("解析失败：" + err.message);
@@ -356,12 +360,14 @@
       });
     }
 
-    // 简单搜索：全列模糊匹配
+    // 简单搜索：全列模糊匹配 + 动画基于过滤结果
     searchInput.addEventListener("input", () => {
       const q = searchInput.value.trim().toLowerCase();
+      if (!rawRows.length) return;
+
       if (!q) {
         renderTable(rawRows);
-        updateWindArrows(rawRows);
+        startWindAnimation(rawRows);
         return;
       }
       const filtered = rawRows.filter((row) =>
@@ -370,67 +376,109 @@
         )
       );
       renderTable(filtered);
-      updateWindArrows(filtered);
+      startWindAnimation(filtered);
     });
 
-    // ========= 绘制风向 / 风速箭头 =========
-    function updateWindArrows(rows) {
+    // ========= 动画相关：只显示 1 个箭头，按时间循环播放 =========
+
+    function stopWindAnimation() {
+      if (animTimer !== null) {
+        clearTimeout(animTimer);
+        animTimer = null;
+      }
+    }
+
+    function startWindAnimation(rows) {
+      stopWindAnimation();
       arrowLayer.clearLayers();
-      if (!rows || !rows.length) return;
+
+      if (!rows || !rows.length) {
+        setStatus("无可用于动画的数据行");
+        animRows = [];
+        return;
+      }
 
       const dirKey = WIND_FIELDS.dir;
       const spdKey = WIND_FIELDS.speed;
 
-      if (!(dirKey in rows[0]) || !(spdKey in rows[0])) {
-        console.warn(
-          "找不到风向/风速列，请检查 WIND_FIELDS 设置是否和 CSV 表头一致"
-        );
-        setStatus(
-          "CSV 已加载，但未找到风向/风速列，请确认列名：" +
-            dirKey +
-            " / " +
-            spdKey
-        );
+      // 过滤掉无效风向/风速
+      animRows = rows.filter((r) => {
+        const d = parseFloat(r[dirKey]);
+        const s = parseFloat(r[spdKey]);
+        return isFinite(d) && isFinite(s);
+      });
+
+      if (!animRows.length) {
+        setStatus("找不到包含有效风向/风速的数据行");
         return;
       }
+
+      animIndex = 0;
+      stepWindAnimation();  // 立刻播放第一帧
+    }
+
+    function stepWindAnimation() {
+      if (!animRows.length) return;
+
+      const row = animRows[animIndex];
+      drawSingleArrow(row);
+
+      // 状态栏显示当前时间（如果有 Timestamp 字段）
+      const tsKey = Object.keys(row).find((k) =>
+        k.toLowerCase().includes("timestamp")
+      );
+      if (tsKey) {
+        setStatus(
+          `动画播放中：${animIndex + 1} / ${animRows.length} · 时间 = ${row[tsKey]}`
+        );
+      } else {
+        setStatus(
+          `动画播放中：${animIndex + 1} / ${animRows.length}`
+        );
+      }
+
+      animIndex = (animIndex + 1) % animRows.length;
+      animTimer = setTimeout(stepWindAnimation, ANIM_INTERVAL);
+    }
+
+    function drawSingleArrow(row) {
+      const dirKey = WIND_FIELDS.dir;
+      const spdKey = WIND_FIELDS.speed;
+
+      const dirDeg = parseFloat(row[dirKey]); // 风向（度）
+      const speed  = parseFloat(row[spdKey]); // 风速（m/s）
+
+      if (!isFinite(dirDeg) || !isFinite(speed)) return;
+
+      arrowLayer.clearLayers();
 
       const baseLat = CONFIG.station.lat;
       const baseLng = CONFIG.station.lng;
 
-      // 只画最近的一部分，避免太乱
-      const maxArrows = Math.min(16, rows.length);
-      const subset = rows.slice(-maxArrows);
+      // 风速 → 箭头长度（简单线性映射，可调）
+      const lenKm = Math.max(0.2, speed * 0.2);
 
-      subset.forEach((row) => {
-        const dirDeg = parseFloat(row[dirKey]); // 风向（度）
-        const speed = parseFloat(row[spdKey]);  // 风速
+      // 将气象角度近似为“箭头指向的方向”
+      const rad = ((dirDeg - 90) * Math.PI) / 180;
 
-        if (!isFinite(dirDeg) || !isFinite(speed)) return;
+      const dLat =
+        (lenKm * Math.sin(rad)) / 111; // 1°纬度 ≈ 111km
+      const dLng =
+        (lenKm * Math.cos(rad)) /
+        (111 * Math.cos((baseLat * Math.PI) / 180));
 
-        // 简单映射到箭头长度（可调整系数）
-        const lenKm = Math.max(0.2, speed * 0.2);
+      const startLat = baseLat;
+      const startLng = baseLng;
+      const endLat   = baseLat + dLat;
+      const endLng   = baseLng + dLng;
 
-        // 这里将气象角度近似为“箭头指向的方向”
-        const rad = ((dirDeg - 90) * Math.PI) / 180;
-
-        const dLat = (lenKm * Math.sin(rad)) / 111; // 1°纬度 ≈ 111km
-        const dLng =
-          (lenKm * Math.cos(rad)) /
-          (111 * Math.cos((baseLat * Math.PI) / 180));
-
-        const startLat = baseLat;
-        const startLng = baseLng;
-        const endLat = baseLat + dLat;
-        const endLng = baseLng + dLng;
-
-        L.polyline(
-          [
-            [startLat, startLng],
-            [endLat, endLng],
-          ],
-          { weight: 2 }
-        ).addTo(arrowLayer);
-      });
+      L.polyline(
+        [
+          [startLat, startLng],
+          [endLat, endLng],
+        ],
+        { weight: 2 }
+      ).addTo(arrowLayer);
     }
   </script>
 </body>
