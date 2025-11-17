@@ -67,7 +67,6 @@
       align-items: center;
     }
     select,
-    input[type="number"],
     input[type="text"] {
       padding: 8px 10px;
       border: 1px solid var(--grid);
@@ -96,13 +95,13 @@
       margin: 0 auto;
       padding: 14px;
     }
-    /* 默认：上下结构 */
+    /* 默认：上下结构（地图上、表格下） */
     .layout {
       display: flex;
       flex-direction: column;
       gap: 20px;
     }
-    /* 超大屏（宽 >= 2560px）：左右结构 */
+    /* 超大屏：宽 >= 2560px 时左右结构 */
     @media (min-width: 2560px) {
       .layout {
         display: grid;
@@ -127,7 +126,6 @@
       color: var(--muted);
       margin-left: 8px;
     }
-
     .table-wrap {
       border: 1px solid var(--grid);
       border-radius: 10px;
@@ -221,9 +219,10 @@
     };
 
     // ⚠️ 根据你的 CSV 表头修改列名
+    // 你给的 2025-10.csv 表头里是： "WD_AV (deg)", "WS_AV (m/s)"
     const WIND_FIELDS = {
-      dir: "WD_AV(deg)",    // 风向列名
-      speed: "WS_AV(m/s)",  // 风速列名
+      dir: "WD_AV (deg)",    // 风向列名（带空格）
+      speed: "WS_AV (m/s)",  // 风速列名（带空格）
     };
 
     const statusEl = document.getElementById("status");
