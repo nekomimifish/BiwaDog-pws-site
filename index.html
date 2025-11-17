@@ -29,7 +29,7 @@
     button.ghost{background:transparent}
     main{max-width:1400px;margin:0 auto;padding:14px}
     .layout{display:grid;grid-template-columns: 1fr 1.2fr;gap:14px}
-    @media (max-width: 2560px){ .layout{grid-template-columns:1fr} }
+    @media (max-width: 1100px){ .layout{grid-template-columns:1fr} }
     .card{background:var(--panel);border:1px solid var(--grid);border-radius:12px;padding:10px}
     #map{height:62vh;min-height:360px;border-radius:10px}
     .status{font-size:12px;color:var(--muted);margin-left:8px}
@@ -95,6 +95,15 @@
       mapCenter: [35.21622, 136.11864],
       mapZoom: 12
     };
+
+    // ======= 风向 / 风速列名（请按你的 CSV 表头调整） =======
+    const WIND_FIELDS = {
+      dir: 'WD_AV(deg)',    // 风向列名，例如 WD_AV(deg)、WD 等
+      speed: 'WS_AV(m/s)'   // 风速列名，例如 WS_AV(m/s)、WS 等
+    };
+
+    // 所有风向箭头绘制在同一个图层，方便清除和重绘
+    const arrowLayer = L.layerGroup();
 
     // ======= 主题切换（默认浅色） =======
     const themeBtn = document.getElementById('themeBtn');
@@ -204,7 +213,51 @@
     });
 
     // ======= 加载 CSV（相对路径 & 防缓存） =======
-    async function loadCSV(){
+    
+    // ======= 根据 CSV 数据在地图上绘制风向 / 风速箭头 =======
+    function updateWindArrows(rows){
+      arrowLayer.clearLayers();
+      if(!rows || !rows.length){
+        return;
+      }
+      const dirKey = WIND_FIELDS.dir;
+      const spdKey = WIND_FIELDS.speed;
+
+      if(!(dirKey in rows[0]) || !(spdKey in rows[0])){
+        console.warn('找不到风向/风速列，请检查 WIND_FIELDS 设置是否和 CSV 表头一致');
+        return;
+      }
+
+      const baseLat = CONFIG.station.lat;
+      const baseLng = CONFIG.station.lng;
+      const maxArrows = Math.min(12, rows.length);
+      const subset = rows.slice(-maxArrows); // 最近几条数据
+
+      subset.forEach((row, idx) => {
+        const dirDeg = parseFloat(row[dirKey]);
+        const speed  = parseFloat(row[spdKey]);
+        if(!isFinite(dirDeg) || !isFinite(speed)) return;
+
+        // 简单把风速映射为箭头长度（单位约 km，系数可根据视觉效果调整）
+        const lenKm = Math.max(0.2, speed * 0.15);
+
+        // 把气象角度（来向）简单当成去向使用；如需严格转换可再微调
+        const rad = (dirDeg - 90) * Math.PI / 180;
+
+        const dLat = (lenKm * Math.sin(rad)) / 111; // 1°纬度 ≈ 111 km
+        const dLng = (lenKm * Math.cos(rad)) / (111 * Math.cos(baseLat * Math.PI/180));
+
+        const startLat = baseLat;
+        const startLng = baseLng;
+        const endLat   = baseLat + dLat;
+        const endLng   = baseLng + dLng;
+
+        const line = L.polyline([[startLat, startLng], [endLat, endLng]], {weight: 2});
+        line.addTo(arrowLayer);
+      });
+    }
+
+async function loadCSV(){
       const y = parseInt(yearSel.value,10);
       const m = parseInt(monSel.value,10)+1;
       const path = `./data/${String(y)}-${String(m).padStart(2,'0')}.csv`;
@@ -225,6 +278,11 @@
             page = 1;
             setStatus(`加载成功：${rows.length} 行 · ${headers.length} 列`);
             renderTable();
+            try {
+              updateWindArrows(rows);
+            } catch(e) {
+              console.error('绘制风向箭头时出错', e);
+            }
           },
           error: (err)=> setStatus('解析失败：'+err.message)
         });
