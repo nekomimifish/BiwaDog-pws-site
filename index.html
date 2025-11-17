@@ -3,74 +3,175 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PWS 地图 + Excel表格（新海浜坐标版）</title>
-  <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="preconnect" href="https://unpkg.com">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-  <style>
-    :root{
-      --bg:#ffffff; --text:#0b1625; --muted:#5b6b82; --panel:#ffffff;
-      --grid:#e5e9f2; --header:#f4f6fb; --accent:#1677ff; --hover:#eef4ff; --sticky:#f8fbff;
-    }
-    .dark{
-      --bg:#0b1016; --text:#ecf2ff; --muted:#9fb1cc; --panel:#101822;
-      --grid:#1f2a3a; --header:#0f1824; --accent:#3aa0ff; --hover:#13283f; --sticky:#112033;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans JP","Noto Sans SC"}
-    header{padding:12px 14px;border-bottom:1px solid var(--grid);display:flex;gap:12px;align-items:center;justify-content:space-between;background:var(--panel);position:sticky;top:0;z-index:10}
-    header h1{margin:0;font-size:18px}
-    .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    select, input[type="number"], input[type="text"]{padding:8px 10px;border:1px solid var(--grid);border-radius:8px;background:var(--panel);color:var(--text")}
-    button{padding:8px 12px;border-radius:8px;border:1px solid var(--grid);background:var(--panel);color:var(--text);cursor:pointer}
-    button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-    button.ghost{background:transparent}
-    main{max-width:1400px;margin:0 auto;padding:14px}
-    .layout{display:grid;grid-template-columns: 1fr 1.2fr;gap:14px}
-    /* 在 屏幕宽度 ≤ 2560px 时，保持上下结构（地图在上、表格在下） */
-    @media (max-width: 2560px){
-      .layout{grid-template-columns:1fr}
-    }
-    .card{background:var(--panel);border:1px solid var(--grid);border-radius:12px;padding:10px}
-    #map{height:62vh;min-height:360px;border-radius:10px}
-    .status{font-size:12px;color:var(--muted);margin-left:8px}
-    /* 表格样式（Excel风格） */
-    .table-wrap{border:1px solid var(--grid);border-radius:10px;overflow:auto;max-height:72vh;background:var(--panel)}
-    table{width:100%;border-collapse:separate;border-spacing:0;font-size:14px}
-    thead th{position:sticky;top:0;background:var(--header);z-index:2;border-bottom:1px solid var(--grid);text-align:left;padding:10px;white-space:nowrap}
-    thead th.sortable{cursor:pointer}
-    thead th .arrow{margin-left:6px;opacity:.65}
-    tbody td{border-bottom:1px solid var(--grid);border-right:1px solid var(--grid);padding:8px;vertical-align:top;background:var(--panel)}
-    tbody tr:hover td{background:var(--hover)}
-    thead th.sticky-first, tbody td.sticky-first{position:sticky;left:0;z-index:1;background:var(--sticky);border-right:1px solid var(--grid)}
-    thead th.sticky-first{z-index:3}
-    .pill{font-size:12px;color:var(--muted);padding:4px 8px;border:1px solid var(--grid);border-radius:999px}
-    .spacer{flex:1}
+  <title>PWS · 新海浜地图 + CSV表格 + 风速/风向箭头</title>
 
-    /* ===== 风速方向箭头样式（参考 BASwind 风格） ===== */
-    .wind-arrow-icon{
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      color:var(--accent);
-      filter:drop-shadow(0 0 4px rgba(0,0,0,.35));
+  <!-- Leaflet & PapaParse：从 CDN 加载 -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #0b1625;
+      --muted: #5b6b82;
+      --panel: #ffffff;
+      --grid: #e5e9f2;
+      --header: #f4f6fb;
+      --accent: #1677ff;
+      --hover: #eef4ff;
     }
-    .dark .wind-arrow-icon{
-      color:#3aa0ff;
+    .dark {
+      --bg: #0b1016;
+      --text: #ecf2ff;
+      --muted: #9fb1cc;
+      --panel: #101822;
+      --grid: #1f2a3a;
+      --header: #0f1824;
+      --accent: #3aa0ff;
+      --hover: #13283f;
     }
-    .wind-arrow-icon svg{
-      display:block;
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+        Arial, "Noto Sans JP", "Noto Sans SC", sans-serif;
+    }
+    header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--grid);
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--panel);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+    }
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    select,
+    input[type="number"],
+    input[type="text"] {
+      padding: 8px 10px;
+      border: 1px solid var(--grid);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--text);
+    }
+    button {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--grid);
+      background: var(--panel);
+      color: var(--text);
+      cursor: pointer;
+    }
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    button.ghost {
+      background: transparent;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 14px;
+    }
+    /* 默认：上下结构 */
+    .layout {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    /* 超大屏（宽 >= 2560px）：左右结构 */
+    @media (min-width: 2560px) {
+      .layout {
+        display: grid;
+        grid-template-columns: 1.05fr 1.2fr;
+        align-items: start;
+        gap: 20px;
+      }
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--grid);
+      border-radius: 12px;
+      padding: 10px;
+    }
+    #map {
+      height: 60vh;
+      min-height: 360px;
+      border-radius: 10px;
+    }
+    .status {
+      font-size: 12px;
+      color: var(--muted);
+      margin-left: 8px;
+    }
+
+    .table-wrap {
+      border: 1px solid var(--grid);
+      border-radius: 10px;
+      overflow: auto;
+      max-height: 70vh;
+      background: var(--panel);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead {
+      background: var(--header);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    th,
+    td {
+      border-bottom: 1px solid var(--grid);
+      padding: 6px 8px;
+      text-align: left;
+      white-space: nowrap;
+    }
+    tbody tr:nth-child(even) td {
+      background: #f9fbff;
+    }
+    tbody tr:hover td {
+      background: var(--hover);
+    }
+    .spacer {
+      flex: 1;
     }
   </style>
 </head>
 <body>
   <header>
-    <h1>PWS 地图 + Excel表格（新海浜坐标版）</h1>
+    <h1>PWS · 新海浜地图 + CSV风速数据</h1>
     <div class="toolbar">
-      <label>年份</label><select id="yearSel"></select>
-      <label>月份</label><select id="monSel"></select>
+      <label>年份</label>
+      <select id="yearSel"></select>
+      <label>月份</label>
+      <select id="monSel"></select>
       <button id="loadBtn" class="primary">加载 ./data/YYYY-MM.csv</button>
       <span id="status" class="status"></span>
       <div class="spacer"></div>
@@ -79,276 +180,259 @@
   </header>
 
   <main class="layout">
-    <!-- 上：地图（≤2560px 时在上方） -->
+    <!-- 上/左：地图 -->
     <section class="card">
       <div id="map"></div>
-      <div class="status" id="mapNote">
-        提示：地图使用 Leaflet，标注为你提供的新海浜风速计位置；加载 CSV 后，会在此位置显示最新一条观测的风速方向箭头
+      <div class="status">
+        坐标：新海浜（35.21622, 136.11864） · 箭头长度 ≈ 风速，方向 ≈ 风向
       </div>
     </section>
 
-    <!-- 下：Excel 风格表格 + 工具条 -->
-    <section>
-      <div class="card toolbar" style="margin-bottom:10px">
-        <label>搜索</label><input id="searchInput" type="text" placeholder="按任意关键词过滤（支持多列）" style="min-width:280px">
-        <label>每页</label><input id="pageSize" type="number" value="200" min="50" max="2000" step="50" style="width:90px">
-        <button id="exportBtn">导出当前筛选为 CSV</button>
-        <span id="meta" class="pill"></span>
+    <!-- 下/右：表格 -->
+    <section class="card">
+      <div class="toolbar" style="margin-bottom: 10px">
+        <label>搜索</label>
+        <input
+          id="searchInput"
+          type="text"
+          placeholder="按任意关键词过滤（全列匹配）"
+          style="min-width: 260px"
+        />
       </div>
-      <div class="table-wrap card">
-        <table id="grid">
-          <thead></thead>
-          <tbody></tbody>
+      <div class="table-wrap">
+        <table id="data-table">
+          <thead id="table-head"></thead>
+          <tbody id="table-body"></tbody>
         </table>
-      </div>
-      <div class="card toolbar" style="justify-content:space-between;margin-top:10px">
-        <div><button id="prevBtn">上一页</button> <button id="nextBtn">下一页</button></div>
-        <div class="pill" id="pageInfo">第 0 / 0 页</div>
       </div>
     </section>
   </main>
 
   <script>
-    // ======= 配置：使用你提供的真实坐标 =======
+    // ========= 基本配置 =========
     const CONFIG = {
-      station: { name:'Shinhama 风速计（新海浜）', lat:35.21622, lng:136.11864 },
+      station: {
+        name: "Shinhama 风速计（新海浜）",
+        lat: 35.21622,
+        lng: 136.11864,
+      },
       mapCenter: [35.21622, 136.11864],
-      mapZoom: 12
+      mapZoom: 12,
     };
 
-    // ======= 主题切换（默认浅色） =======
-    const themeBtn = document.getElementById('themeBtn');
-    themeBtn.addEventListener('click', () => {
-      document.body.classList.toggle('dark');
-      themeBtn.textContent = document.body.classList.contains('dark') ? '切换为浅色' : '切换深色/浅色';
-    });
+    // ⚠️ 根据你的 CSV 表头修改列名
+    const WIND_FIELDS = {
+      dir: "WD_AV(deg)",    // 风向列名
+      speed: "WS_AV(m/s)",  // 风速列名
+    };
 
-    // ======= Leaflet 地图 =======
-    const map = L.map('map').setView(CONFIG.mapCenter, CONFIG.mapZoom);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '&copy; OpenStreetMap'
-    }).addTo(map);
-    const marker = L.marker([CONFIG.station.lat, CONFIG.station.lng]).addTo(map).bindPopup(CONFIG.station.name);
+    const statusEl = document.getElementById("status");
+    const yearSel = document.getElementById("yearSel");
+    const monSel = document.getElementById("monSel");
+    const searchInput = document.getElementById("searchInput");
+    const tableHead = document.getElementById("table-head");
+    const tableBody = document.getElementById("table-body");
 
-    // 用于保存风速方向箭头的 marker
-    let windArrowMarker = null;
+    let rawRows = []; // 原始 CSV 行
 
-    /**
-     * 从 CSV 原始行（对象数组）中，取最后一行，绘制风速方向箭头
-     * 默认尝试找：
-     *   - 风向：包含 "WD" 或 "dir" 的列（优先 WD_AV(deg)）
-     *   - 风速：包含 "WS" 或 "spd" / "speed" 的列（优先 WS_AV(m/s)）
-     * 如果你的列名不同，可以在这里手动指定。
-     */
-    function updateWindArrowFromRows(rows){
-      if (!rows || !rows.length) return;
-
-      const last = rows[rows.length - 1];
-
-      // 自动检测列名（带一点容错）
-      const keys = Object.keys(last);
-      const findKey = (patterns, fallback) =>
-        keys.find(k => patterns.some(p => p.test(k))) || fallback;
-
-      const dirKey = findKey([/wd/i, /dir/i], 'WD_AV(deg)');
-      const spdKey = findKey([/ws/i, /spd/i, /speed/i], 'WS_AV(m/s)');
-
-      const dirRaw = last[dirKey];
-      const spdRaw = last[spdKey];
-      const dir = parseFloat(dirRaw);
-      const spd = parseFloat(spdRaw);
-
-      if (!isFinite(dir) || !isFinite(spd)) {
-        console.warn('无法从 CSV 中解析风向/风速：', { dirKey, spdKey, dirRaw, spdRaw });
-        return;
-      }
-
-      // 删除旧的箭头
-      if (windArrowMarker) {
-        map.removeLayer(windArrowMarker);
-        windArrowMarker = null;
-      }
-
-      // 箭头大小随风速变化（m/s），上限适当限制
-      const clamped = Math.max(0, Math.min(spd, 15)); // 0~15 m/s
-      const size = 30 + clamped * 2; // 基础 30px + 每 m/s 加 2px
-
-      // 这里假设 dir 为「从该方向吹来」的气象角度（0°=北风），
-      // 如果你想让箭头朝风吹去的方向，可以改为 (dir + 180) % 360。
-      const arrowRotation = dir;
-
-      const arrowHTML = `
-        <div class="wind-arrow-icon"
-             title="风速 ${spd.toFixed(1)} m/s, 风向 ${dir.toFixed(0)}° (${dirKey}, ${spdKey})">
-          <svg width="${size}" height="${size}" viewBox="0 0 40 40">
-            <g transform="translate(20,20) rotate(${arrowRotation})">
-              <!-- 主体箭杆 -->
-              <line x1="-12" y1="0" x2="12" y2="0"
-                    stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" />
-              <!-- 箭头 -->
-              <polygon points="12,0 3,-4 3,4" fill="currentColor" />
-              <!-- 反向小尾巴，稍微接近 BASwind 的感觉 -->
-              <line x1="-12" y1="0" x2="-6" y2="0"
-                    stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" opacity="0.5" />
-            </g>
-          </svg>
-        </div>
-      `;
-
-      const icon = L.divIcon({
-        className: 'wind-arrow-icon',
-        html: arrowHTML,
-        iconSize: [size, size],
-        iconAnchor: [size / 2, size / 2]
-      });
-
-      windArrowMarker = L.marker(
-        [CONFIG.station.lat, CONFIG.station.lng],
-        { icon }
-      ).addTo(map).bindPopup(
-        `${CONFIG.station.name}<br>风速：${spd.toFixed(1)} m/s<br>风向：${dir.toFixed(0)}°`
-      );
+    function setStatus(msg) {
+      statusEl.textContent = msg || "";
     }
 
-    // ======= 年月选择 =======
-    const yearSel = document.getElementById('yearSel');
-    const monSel = document.getElementById('monSel');
-    (function initYM(){
+    // ========= 主题切换 =========
+    document.getElementById("themeBtn").addEventListener("click", () => {
+      document.body.classList.toggle("dark");
+      const btn = document.getElementById("themeBtn");
+      btn.textContent = document.body.classList.contains("dark")
+        ? "切换为浅色"
+        : "切换深色/浅色";
+    });
+
+    // ========= 初始化地图 =========
+    const map = L.map("map").setView(CONFIG.mapCenter, CONFIG.mapZoom);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap",
+    }).addTo(map);
+
+    // 测站点
+    L.marker([CONFIG.station.lat, CONFIG.station.lng])
+      .addTo(map)
+      .bindPopup(CONFIG.station.name)
+      .openPopup();
+
+    // 箭头图层
+    const arrowLayer = L.layerGroup().addTo(map);
+
+    // ========= 年月下拉 =========
+    (function initYM() {
       const now = new Date();
-      for(let y=now.getFullYear()-5; y<=now.getFullYear()+2; y++){
-        const o = document.createElement('option'); o.value=y; o.textContent=y; if(y===now.getFullYear()) o.selected=true; yearSel.appendChild(o);
+      for (let y = now.getFullYear() - 5; y <= now.getFullYear() + 2; y++) {
+        const opt = document.createElement("option");
+        opt.value = y;
+        opt.textContent = y;
+        if (y === now.getFullYear()) opt.selected = true;
+        yearSel.appendChild(opt);
       }
-      for(let m=0; m<12; m++){
-        const o = document.createElement('option'); o.value=m; o.textContent=(m+1)+' 月'; if(m===now.getMonth()) o.selected=true; monSel.appendChild(o);
+      for (let m = 0; m < 12; m++) {
+        const opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = m + 1 + " 月";
+        if (m === now.getMonth()) opt.selected = true;
+        monSel.appendChild(opt);
       }
     })();
 
-    // ======= 状态与工具 =======
-    const statusEl = document.getElementById('status');
-    const $ = s => document.querySelector(s);
-    const pad2 = n => String(n).padStart(2,'0');
-    function setStatus(t){ statusEl.textContent = t || ''; }
-    function escapeHTML(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-    function toCSV(rows){ return rows.map(r => r.map(cell => {
-      const str = (cell==null)?'':String(cell);
-      return /[",\n]/.test(str) ? '"'+str.replace(/"/g,'""')+'"' : str;
-    }).join(',')).join('\n'); }
+    // ========= 读取 CSV =========
+    async function loadCSV() {
+      const y = parseInt(yearSel.value, 10);
+      const m = parseInt(monSel.value, 10) + 1;
+      const path = `./data/${String(y)}-${String(m).padStart(2, "0")}.csv`;
 
-    // ======= 表格数据状态 =======
-    let headers = [];
-    let dataRows = [];
-    let filteredRows = [];
-    let sortInfo = { index:-1, dir:1 };
-    let page = 1;
-    let pageSize = 200;
-
-    // ======= 渲染表格 =======
-    function renderTable(){
-      const thead = document.querySelector('#grid thead');
-      const tbody = document.querySelector('#grid tbody');
-      thead.innerHTML = '<tr>' + headers.map((h,i) => {
-        const arrow = (sortInfo.index===i) ? (sortInfo.dir>0?'▲':'▼') : '';
-        return `<th class="${i===0?'sticky-first ':''}sortable" data-idx="${i}">${escapeHTML(h)} <span class="arrow">${arrow}</span></th>`;
-      }).join('') + '</tr>';
-      thead.querySelectorAll('th.sortable').forEach(th => {
-        th.addEventListener('click', () => {
-          const i = parseInt(th.dataset.idx,10);
-          if(sortInfo.index===i){ sortInfo.dir*=-1; } else { sortInfo.index=i; sortInfo.dir=1; }
-          sortRows(); page=1; renderTable(); renderBody();
-        });
-      });
-      renderBody();
-    }
-    function renderBody(){
-      const tbody = document.querySelector('#grid tbody');
-      pageSize = parseInt(document.getElementById('pageSize').value,10) || 200;
-      const total = filteredRows.length;
-      const totalPages = Math.max(1, Math.ceil(total / pageSize));
-      if(page>totalPages) page = totalPages;
-      const start = (page-1)*pageSize;
-      const slice = filteredRows.slice(start, start+pageSize);
-      tbody.innerHTML = slice.map(row => '<tr>' + row.map((cell,i)=>`<td class="${i===0?'sticky-first':''}">${escapeHTML(cell==null?'':cell)}</td>`).join('') + '</tr>').join('');
-      document.getElementById('pageInfo').textContent = `第 ${page} / ${totalPages} 页（共 ${total.toLocaleString()} 行，当前每页 ${pageSize} 行）`;
-      document.getElementById('meta').textContent = `已加载 ${total.toLocaleString()} 行 | 列数 ${headers.length}`;
-    }
-    function applyFilter(){
-      const q = document.getElementById('searchInput').value.trim().toLowerCase();
-      filteredRows = !q ? dataRows :
-        dataRows.filter(r => r.some(v => (v!=null) && String(v).toLowerCase().includes(q)));
-      sortRows(); page=1; renderTable();
-    }
-    function sortRows(){
-      if(sortInfo.index<0) return;
-      const i = sortInfo.index, d = sortInfo.dir;
-      filteredRows.sort((a,b)=>{
-        const A = a[i]==null ? '' : a[i];
-        const B = b[i]==null ? '' : b[i];
-        const nA = parseFloat(A), nB = parseFloat(B);
-        const bothNum = isFinite(nA) && isFinite(nB);
-        if(bothNum) return (nA - nB) * d;
-        return String(A).localeCompare(String(B)) * d;
-      });
-    }
-    document.getElementById('searchInput').addEventListener('input', ()=>{ clearTimeout(window._t); window._t=setTimeout(applyFilter,150); });
-    document.getElementById('pageSize').addEventListener('change', ()=>{ page=1; renderBody(); });
-    document.getElementById('prevBtn').addEventListener('click', ()=>{ if(page>1){ page--; renderBody(); } });
-    document.getElementById('nextBtn').addEventListener('click', ()=>{ const totalPages=Math.max(1,Math.ceil(filteredRows.length/pageSize)); if(page<totalPages){ page++; renderBody(); } });
-
-    // ======= 导出当前筛选 =======
-    document.getElementById('exportBtn').addEventListener('click', () => {
-      const csv = toCSV([headers, ...filteredRows]);
-      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href=url; a.download='filtered.csv'; a.click();
-      URL.revokeObjectURL(url);
-    });
-
-    // ======= 加载 CSV（相对路径 & 防缓存） =======
-    async function loadCSV(){
-      const y = parseInt(yearSel.value,10);
-      const m = parseInt(monSel.value,10)+1;
-      const path = `./data/${String(y)}-${String(m).padStart(2,'0')}.csv`;
       setStatus(`请求 ${path} ...`);
-      try{
-        const res = await fetch(`${path}?t=${Date.now()}`, {cache:'no-store'});
-        if(!res.ok) throw new Error(`HTTP ${res.status} - ${path}`);
-        const text = await res.text();
-        Papa.parse(text, {
-          header:true, skipEmptyLines:true, dynamicTyping:false,
-          complete: (parsed)=>{
-            const rows = parsed.data || [];
-            if(!rows.length){ setStatus('CSV 为空'); return; }
-            headers = Object.keys(rows[0]);
-            dataRows = rows.map(r => headers.map(h => r[h]));
-            filteredRows = dataRows.slice();
-            sortInfo = { index:-1, dir:1 };
-            page = 1;
-            setStatus(`加载成功：${rows.length} 行 · ${headers.length} 列`);
 
-            // 1) 更新表格
-            renderTable();
-            // 2) 使用最新一条观测更新地图上的风速方向箭头
-            updateWindArrowFromRows(rows);
+      try {
+        const res = await fetch(`${path}?t=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+
+        Papa.parse(text, {
+          header: true,
+          skipEmptyLines: true,
+          dynamicTyping: false,
+          complete: (parsed) => {
+            const rows = parsed.data || [];
+            if (!rows.length) {
+              setStatus("CSV 为空");
+              rawRows = [];
+              renderTable([]);
+              arrowLayer.clearLayers();
+              return;
+            }
+            rawRows = rows;
+            setStatus(`加载成功：${rows.length} 行 · ${Object.keys(rows[0]).length} 列`);
+            renderTable(rows);
+            updateWindArrows(rows);
           },
-          error: (err)=> setStatus('解析失败：'+err.message)
+          error: (err) => {
+            setStatus("解析失败：" + err.message);
+          },
         });
-      }catch(err){
+      } catch (err) {
         console.error(err);
-        setStatus(`加载失败：${err.message}（请确认该文件已上传且同源）`);
+        setStatus(`加载失败：${path}（${err.message}）`);
       }
     }
-    document.getElementById('loadBtn').addEventListener('click', loadCSV);
-  </script>
 
-  <!-- 右侧工具条 & 表格容器（与脚本中的选择器匹配） -->
-  <div style="position:fixed;left:-9999px;top:-9999px" aria-hidden="true">
-    <input id="searchInput" />
-    <input id="pageSize" />
-    <div id="pageInfo"></div>
-    <div id="meta"></div>
-    <table id="grid"><thead></thead><tbody></tbody></table>
-  </div>
+    document.getElementById("loadBtn").addEventListener("click", loadCSV);
+
+    // ========= 表格渲染 =========
+    function renderTable(rows) {
+      tableHead.innerHTML = "";
+      tableBody.innerHTML = "";
+
+      if (!rows || !rows.length) return;
+
+      const headers = Object.keys(rows[0]);
+
+      // 表头
+      const trHead = document.createElement("tr");
+      headers.forEach((h) => {
+        const th = document.createElement("th");
+        th.textContent = h;
+        trHead.appendChild(th);
+      });
+      tableHead.appendChild(trHead);
+
+      // 表身
+      rows.forEach((row) => {
+        const tr = document.createElement("tr");
+        headers.forEach((h) => {
+          const td = document.createElement("td");
+          const v = row[h];
+          td.textContent = v == null ? "" : String(v);
+          tr.appendChild(td);
+        });
+        tableBody.appendChild(tr);
+      });
+    }
+
+    // 简单搜索：全列模糊匹配
+    searchInput.addEventListener("input", () => {
+      const q = searchInput.value.trim().toLowerCase();
+      if (!q) {
+        renderTable(rawRows);
+        updateWindArrows(rawRows);
+        return;
+      }
+      const filtered = rawRows.filter((row) =>
+        Object.values(row).some(
+          (v) => v != null && String(v).toLowerCase().includes(q)
+        )
+      );
+      renderTable(filtered);
+      updateWindArrows(filtered);
+    });
+
+    // ========= 绘制风向 / 风速箭头 =========
+    function updateWindArrows(rows) {
+      arrowLayer.clearLayers();
+      if (!rows || !rows.length) return;
+
+      const dirKey = WIND_FIELDS.dir;
+      const spdKey = WIND_FIELDS.speed;
+
+      if (!(dirKey in rows[0]) || !(spdKey in rows[0])) {
+        console.warn(
+          "找不到风向/风速列，请检查 WIND_FIELDS 设置是否和 CSV 表头一致"
+        );
+        setStatus(
+          "CSV 已加载，但未找到风向/风速列，请确认列名：" +
+            dirKey +
+            " / " +
+            spdKey
+        );
+        return;
+      }
+
+      const baseLat = CONFIG.station.lat;
+      const baseLng = CONFIG.station.lng;
+
+      // 只画最近的一部分，避免太乱
+      const maxArrows = Math.min(16, rows.length);
+      const subset = rows.slice(-maxArrows);
+
+      subset.forEach((row) => {
+        const dirDeg = parseFloat(row[dirKey]); // 风向（度）
+        const speed = parseFloat(row[spdKey]);  // 风速
+
+        if (!isFinite(dirDeg) || !isFinite(speed)) return;
+
+        // 简单映射到箭头长度（可调整系数）
+        const lenKm = Math.max(0.2, speed * 0.2);
+
+        // 这里将气象角度近似为“箭头指向的方向”
+        const rad = ((dirDeg - 90) * Math.PI) / 180;
+
+        const dLat = (lenKm * Math.sin(rad)) / 111; // 1°纬度 ≈ 111km
+        const dLng =
+          (lenKm * Math.cos(rad)) /
+          (111 * Math.cos((baseLat * Math.PI) / 180));
+
+        const startLat = baseLat;
+        const startLng = baseLng;
+        const endLat = baseLat + dLat;
+        const endLng = baseLng + dLng;
+
+        L.polyline(
+          [
+            [startLat, startLng],
+            [endLat, endLng],
+          ],
+          { weight: 2 }
+        ).addTo(arrowLayer);
+      });
+    }
+  </script>
 </body>
 </html>
