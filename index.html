@@ -441,45 +441,83 @@
       animTimer = setTimeout(stepWindAnimation, ANIM_INTERVAL);
     }
 
-    function drawSingleArrow(row) {
-      const dirKey = WIND_FIELDS.dir;
-      const spdKey = WIND_FIELDS.speed;
+function drawSingleArrow(row) {
+  const dirKey = WIND_FIELDS.dir;
+  const spdKey = WIND_FIELDS.speed;
 
-      const dirDeg = parseFloat(row[dirKey]); // 风向（度）
-      const speed  = parseFloat(row[spdKey]); // 风速（m/s）
+  const dirDeg = parseFloat(row[dirKey]); // 风向（度）
+  const speed  = parseFloat(row[spdKey]); // 风速（m/s）
 
-      if (!isFinite(dirDeg) || !isFinite(speed)) return;
+  if (!isFinite(dirDeg) || !isFinite(speed)) return;
 
-      arrowLayer.clearLayers();
+  // 每一帧只画一个箭头，先清空
+  arrowLayer.clearLayers();
 
-      const baseLat = CONFIG.station.lat;
-      const baseLng = CONFIG.station.lng;
+  const baseLat = CONFIG.station.lat;
+  const baseLng = CONFIG.station.lng;
 
-      // 风速 → 箭头长度（简单线性映射，可调）
-      const lenKm = Math.max(0.2, speed * 0.2);
+  // ===== 1. 用风速决定箭头颜色 =====
+  // 小风：绿色，中等：黄色，大风：红色
+  let color;
+  if (speed < 3) {
+    color = "#2ecc71";   // 绿
+  } else if (speed < 7) {
+    color = "#f1c40f";   // 黄
+  } else {
+    color = "#e74c3c";   // 红
+  }
 
-      // 将气象角度近似为“箭头指向的方向”
-      const rad = ((dirDeg - 90) * Math.PI) / 180;
+  // ===== 2. 用风速决定箭头粗细 =====
+  let weight;
+  if (speed < 3) {
+    weight = 4;
+  } else if (speed < 7) {
+    weight = 6;
+  } else {
+    weight = 8;
+  }
 
-      const dLat =
-        (lenKm * Math.sin(rad)) / 111; // 1°纬度 ≈ 111km
-      const dLng =
-        (lenKm * Math.cos(rad)) /
-        (111 * Math.cos((baseLat * Math.PI) / 180));
+  // ===== 3. 用风速决定箭头长度（比之前更长、更显眼）=====
+  const lenKm = Math.max(0.3, speed * 0.35);
 
-      const startLat = baseLat;
-      const startLng = baseLng;
-      const endLat   = baseLat + dLat;
-      const endLng   = baseLng + dLng;
+  // 将气象角度近似为“箭头指向的方向”
+  const rad = ((dirDeg - 90) * Math.PI) / 180;
 
-      L.polyline(
-        [
-          [startLat, startLng],
-          [endLat, endLng],
-        ],
-        { weight: 2 }
-      ).addTo(arrowLayer);
+  const dLat =
+    (lenKm * Math.sin(rad)) / 111; // 1°纬度 ≈ 111km
+  const dLng =
+    (lenKm * Math.cos(rad)) /
+    (111 * Math.cos((baseLat * Math.PI) / 180));
+
+  const startLat = baseLat;
+  const startLng = baseLng;
+  const endLat   = baseLat + dLat;
+  const endLng   = baseLng + dLng;
+
+  // 底部做一个小圆点，更显眼
+  L.circleMarker([startLat, startLng], {
+    radius: 4,
+    color: color,
+    fillColor: color,
+    fillOpacity: 0.9,
+    weight: 2,
+  }).addTo(arrowLayer);
+
+  // 画粗箭头线
+  L.polyline(
+    [
+      [startLat, startLng],
+      [endLat, endLng],
+    ],
+    {
+      weight: weight,
+      color: color,
+      opacity: 0.95,
+      lineCap: "round",
     }
+  ).addTo(arrowLayer);
+}
+
   </script>
 </body>
 </html>
