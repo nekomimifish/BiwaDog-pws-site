@@ -11,6 +11,8 @@
     href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
   />
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- 箭头头部专用插件 -->
+  <script src="https://cdn.jsdelivr.net/npm/leaflet-polylinedecorator@1.7.0/dist/leaflet.polylineDecorator.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
   <style>
@@ -67,20 +69,22 @@
       align-items: center;
     }
     select,
-    input[type="text"] {
-      padding: 8px 10px;
+    input[type="text"],
+    input[type="range"] {
+      padding: 6px 8px;
       border: 1px solid var(--grid);
       border-radius: 8px;
       background: var(--panel);
       color: var(--text);
     }
     button {
-      padding: 8px 12px;
+      padding: 6px 10px;
       border-radius: 8px;
       border: 1px solid var(--grid);
       background: var(--panel);
       color: var(--text);
       cursor: pointer;
+      font-size: 12px;
     }
     button.primary {
       background: var(--accent);
@@ -125,6 +129,33 @@
       font-size: 12px;
       color: var(--muted);
       margin-left: 8px;
+    }
+    .map-controls {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+    }
+    .map-controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .time-label {
+      font-weight: 500;
+    }
+    #currentTime {
+      font-family: "Consolas", "SF Mono", monospace;
+    }
+    .slider-wrap {
+      width: 100%;
+    }
+    .slider-wrap input[type="range"] {
+      width: 100%;
+      padding: 0;
     }
     .table-wrap {
       border: 1px solid var(--grid);
@@ -181,8 +212,26 @@
     <!-- 上/左：地图 -->
     <section class="card">
       <div id="map"></div>
-      <div class="status">
-        坐标：新海浜（35.21622, 136.11864） · 箭头长度 ≈ 风速，方向 ≈ 风向
+      <div class="map-controls">
+        <div class="map-controls-row">
+          <div class="time-label">
+            当前时间：<span id="currentTime">--</span>
+          </div>
+          <div class="btn-group">
+            <button id="prevBtn">◀ 上一条</button>
+            <button id="playPauseBtn" class="primary">⏸ 暂停</button>
+            <button id="nextBtn">下一条 ▶</button>
+          </div>
+        </div>
+        <div class="map-controls-row">
+          <div>时间位置：</div>
+          <div class="slider-wrap">
+            <input type="range" id="timeSlider" min="0" max="0" value="0" />
+          </div>
+        </div>
+        <div class="status">
+          坐标：新海浜（35.21622, 136.11864） · 箭头长度 ≈ 风速，方向 ≈ 风向
+        </div>
       </div>
     </section>
 
@@ -218,7 +267,7 @@
       mapZoom: 12,
     };
 
-    // 你的 2025-10.csv 表头里的风向/风速列名（带空格）
+    // 你的 CSV 表头里的风向/风速列名（带空格）
     const WIND_FIELDS = {
       dir: "WD_AV (deg)",    // 风向列名
       speed: "WS_AV (m/s)",  // 风速列名
@@ -230,11 +279,17 @@
     const searchInput = document.getElementById("searchInput");
     const tableHead = document.getElementById("table-head");
     const tableBody = document.getElementById("table-body");
+    const timeSlider = document.getElementById("timeSlider");
+    const currentTimeEl = document.getElementById("currentTime");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const playPauseBtn = document.getElementById("playPauseBtn");
 
-    let rawRows = [];    // 原始 CSV 行（对象数组）
+    let rawRows = [];    // 原始 CSV 行
     let animRows = [];   // 用于动画的行
-    let animIndex = 0;   // 当前播放到第几条
+    let animIndex = 0;   // 当前播放到第几条（索引）
     let animTimer = null;
+    let isPlaying = true;
     const ANIM_INTERVAL = 1000; // 每帧间隔（毫秒），1000=1秒
 
     function setStatus(msg) {
@@ -379,8 +434,7 @@
       startWindAnimation(filtered);
     });
 
-    // ========= 动画相关：只显示 1 个箭头，按时间循环播放 =========
-
+    // ========= 动画控制 =========
     function stopWindAnimation() {
       if (animTimer !== null) {
         clearTimeout(animTimer);
@@ -414,7 +468,12 @@
       }
 
       animIndex = 0;
-      stepWindAnimation();  // 立刻播放第一帧
+      timeSlider.min = 0;
+      timeSlider.max = animRows.length - 1;
+      timeSlider.value = 0;
+      isPlaying = true;
+      playPauseBtn.textContent = "⏸ 暂停";
+      stepWindAnimation();  // 播放第一帧
     }
 
     function stepWindAnimation() {
@@ -422,102 +481,157 @@
 
       const row = animRows[animIndex];
       drawSingleArrow(row);
+      updateTimeUI(row, animIndex);
 
-      // 状态栏显示当前时间（如果有 Timestamp 字段）
+      animIndex = (animIndex + 1) % animRows.length;
+
+      if (isPlaying) {
+        animTimer = setTimeout(stepWindAnimation, ANIM_INTERVAL);
+      }
+    }
+
+    function updateTimeUI(row, idx) {
       const tsKey = Object.keys(row).find((k) =>
         k.toLowerCase().includes("timestamp")
       );
       if (tsKey) {
+        currentTimeEl.textContent = row[tsKey];
         setStatus(
-          `动画播放中：${animIndex + 1} / ${animRows.length} · 时间 = ${row[tsKey]}`
+          `动画：${idx + 1} / ${animRows.length} · 时间 = ${row[tsKey]}`
         );
       } else {
-        setStatus(
-          `动画播放中：${animIndex + 1} / ${animRows.length}`
-        );
+        currentTimeEl.textContent = "--";
+        setStatus(`动画：${idx + 1} / ${animRows.length}`);
       }
+      timeSlider.value = idx;
+    }
 
+    // ========= 时间控制 UI：滑块 & 按钮 =========
+    timeSlider.addEventListener("input", () => {
+      if (!animRows.length) return;
+      const idx = parseInt(timeSlider.value, 10);
+      animIndex = idx;
+      const row = animRows[idx];
+      drawSingleArrow(row);
+      updateTimeUI(row, idx);
+      // 用户手动拖动时自动暂停
+      stopWindAnimation();
+      isPlaying = false;
+      playPauseBtn.textContent = "▶ 播放";
+    });
+
+    prevBtn.addEventListener("click", () => {
+      if (!animRows.length) return;
+      stopWindAnimation();
+      isPlaying = false;
+      playPauseBtn.textContent = "▶ 播放";
+      animIndex = (animIndex - 1 + animRows.length) % animRows.length;
+      const row = animRows[animIndex];
+      drawSingleArrow(row);
+      updateTimeUI(row, animIndex);
+    });
+
+    nextBtn.addEventListener("click", () => {
+      if (!animRows.length) return;
+      stopWindAnimation();
+      isPlaying = false;
+      playPauseBtn.textContent = "▶ 播放";
       animIndex = (animIndex + 1) % animRows.length;
-      animTimer = setTimeout(stepWindAnimation, ANIM_INTERVAL);
+      const row = animRows[animIndex];
+      drawSingleArrow(row);
+      updateTimeUI(row, animIndex);
+    });
+
+    playPauseBtn.addEventListener("click", () => {
+      if (!animRows.length) return;
+      if (isPlaying) {
+        // 改为暂停
+        stopWindAnimation();
+        isPlaying = false;
+        playPauseBtn.textContent = "▶ 播放";
+      } else {
+        // 从当前 animIndex 继续播放
+        isPlaying = true;
+        playPauseBtn.textContent = "⏸ 暂停";
+        stepWindAnimation();
+      }
+    });
+
+    // ========= 画单个箭头（超粗 + 带箭头头部 + 颜色随风速） =========
+    function drawSingleArrow(row) {
+      const dirKey = WIND_FIELDS.dir;
+      const spdKey = WIND_FIELDS.speed;
+
+      const dirDeg = parseFloat(row[dirKey]); // 风向（度）
+      const speed  = parseFloat(row[spdKey]); // 风速（m/s）
+
+      if (!isFinite(dirDeg) || !isFinite(speed)) return;
+
+      arrowLayer.clearLayers();
+
+      const baseLat = CONFIG.station.lat;
+      const baseLng = CONFIG.station.lng;
+
+      // 风速 → 颜色（绿-黄-红）
+      let color;
+      if (speed < 3) color = "#2ecc71";       // 低风速：绿
+      else if (speed < 7) color = "#f1c40f";  // 中风：黄
+      else color = "#e74c3c";                 // 高风速：红
+
+      // 风速 → 粗细
+      const lineWidth = Math.min(14, 6 + speed);  // 最大 14 像素
+
+      // 风速 → 箭头长度（更夸张一点更好看）
+      const lenKm = Math.max(0.4, speed * 0.5);
+
+      // 角度换算
+      const rad = ((dirDeg - 90) * Math.PI) / 180;
+      const dLat = (lenKm * Math.sin(rad)) / 111;
+      const dLng =
+        (lenKm * Math.cos(rad)) /
+        (111 * Math.cos((baseLat * Math.PI) / 180));
+
+      const start = L.latLng(baseLat, baseLng);
+      const end   = L.latLng(baseLat + dLat, baseLng + dLng);
+
+      // 起点小圆点
+      L.circleMarker(start, {
+        radius: 5,
+        color: color,
+        fillColor: color,
+        fillOpacity: 1,
+        weight: 2,
+      }).addTo(arrowLayer);
+
+      // 主体粗线
+      const mainLine = L.polyline([start, end], {
+        weight: lineWidth,
+        color: color,
+        opacity: 1,
+        lineCap: "round",
+      }).addTo(arrowLayer);
+
+      // 箭头头部（大三角形）
+      L.polylineDecorator(mainLine, {
+        patterns: [
+          {
+            offset: '100%',
+            repeat: 0,
+            symbol: L.Symbol.arrowHead({
+              pixelSize: Math.min(40, 20 + speed * 4),  // 尖端大小随风速变化
+              polygon: true,
+              pathOptions: {
+                stroke: true,
+                weight: lineWidth,
+                color: color,
+                fillColor: color,
+                fillOpacity: 1.0,
+              },
+            }),
+          },
+        ],
+      }).addTo(arrowLayer);
     }
-
-function drawSingleArrow(row) {
-  const dirKey = WIND_FIELDS.dir;
-  const spdKey = WIND_FIELDS.speed;
-
-  const dirDeg = parseFloat(row[dirKey]); // 风向（度）
-  const speed  = parseFloat(row[spdKey]); // 风速（m/s）
-
-  if (!isFinite(dirDeg) || !isFinite(speed)) return;
-
-  // 每一帧只画一个箭头，先清空
-  arrowLayer.clearLayers();
-
-  const baseLat = CONFIG.station.lat;
-  const baseLng = CONFIG.station.lng;
-
-  // ===== 1. 用风速决定箭头颜色 =====
-  // 小风：绿色，中等：黄色，大风：红色
-  let color;
-  if (speed < 3) {
-    color = "#2ecc71";   // 绿
-  } else if (speed < 7) {
-    color = "#f1c40f";   // 黄
-  } else {
-    color = "#e74c3c";   // 红
-  }
-
-  // ===== 2. 用风速决定箭头粗细 =====
-  let weight;
-  if (speed < 3) {
-    weight = 4;
-  } else if (speed < 7) {
-    weight = 6;
-  } else {
-    weight = 8;
-  }
-
-  // ===== 3. 用风速决定箭头长度（比之前更长、更显眼）=====
-  const lenKm = Math.max(0.3, speed * 0.35);
-
-  // 将气象角度近似为“箭头指向的方向”
-  const rad = ((dirDeg - 90) * Math.PI) / 180;
-
-  const dLat =
-    (lenKm * Math.sin(rad)) / 111; // 1°纬度 ≈ 111km
-  const dLng =
-    (lenKm * Math.cos(rad)) /
-    (111 * Math.cos((baseLat * Math.PI) / 180));
-
-  const startLat = baseLat;
-  const startLng = baseLng;
-  const endLat   = baseLat + dLat;
-  const endLng   = baseLng + dLng;
-
-  // 底部做一个小圆点，更显眼
-  L.circleMarker([startLat, startLng], {
-    radius: 4,
-    color: color,
-    fillColor: color,
-    fillOpacity: 0.9,
-    weight: 2,
-  }).addTo(arrowLayer);
-
-  // 画粗箭头线
-  L.polyline(
-    [
-      [startLat, startLng],
-      [endLat, endLng],
-    ],
-    {
-      weight: weight,
-      color: color,
-      opacity: 0.95,
-      lineCap: "round",
-    }
-  ).addTo(arrowLayer);
-}
-
   </script>
 </body>
 </html>
