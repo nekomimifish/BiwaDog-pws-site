@@ -147,7 +147,8 @@
     .time-label {
       font-weight: 500;
     }
-    #currentTime {
+    #currentTime,
+    #currentSpeed {
       font-family: "Consolas", "SF Mono", monospace;
     }
     .slider-wrap {
@@ -215,7 +216,8 @@
       <div class="map-controls">
         <div class="map-controls-row">
           <div class="time-label">
-            当前时间：<span id="currentTime">--</span>
+            当前日期：<span id="currentTime">--</span>
+            ｜ 风速：<span id="currentSpeed">--</span> m/s
           </div>
           <div class="btn-group">
             <button id="prevBtn">◀ 上一条</button>
@@ -267,7 +269,7 @@
       mapZoom: 12,
     };
 
-    // 你的 CSV 表头里的风向/风速列名（带空格）
+    // 根据 CSV 表头：WD_AV (deg), WS_AV (m/s)
     const WIND_FIELDS = {
       dir: "WD_AV (deg)",    // 风向列名
       speed: "WS_AV (m/s)",  // 风速列名
@@ -281,16 +283,17 @@
     const tableBody = document.getElementById("table-body");
     const timeSlider = document.getElementById("timeSlider");
     const currentTimeEl = document.getElementById("currentTime");
+    const currentSpeedEl = document.getElementById("currentSpeed");
     const prevBtn = document.getElementById("prevBtn");
     const nextBtn = document.getElementById("nextBtn");
     const playPauseBtn = document.getElementById("playPauseBtn");
 
     let rawRows = [];    // 原始 CSV 行
     let animRows = [];   // 用于动画的行
-    let animIndex = 0;   // 当前播放到第几条（索引）
+    let animIndex = 0;   // 当前播放到第几条
     let animTimer = null;
     let isPlaying = true;
-    const ANIM_INTERVAL = 1000; // 每帧间隔（毫秒），1000=1秒
+    const ANIM_INTERVAL = 1000; // 每帧间隔（毫秒）
 
     function setStatus(msg) {
       statusEl.textContent = msg || "";
@@ -490,19 +493,42 @@
       }
     }
 
+    // 更新“日期 + 风速”显示 & 滑块
     function updateTimeUI(row, idx) {
+      // 1. 找时间字段（Timestamp）
       const tsKey = Object.keys(row).find((k) =>
         k.toLowerCase().includes("timestamp")
       );
+
+      // 2. 找风速字段
+      const spdKey = WIND_FIELDS.speed;
+      const speedVal = row[spdKey];
+
+      // === 日期处理：只显示 年/月/日 ===
       if (tsKey) {
-        currentTimeEl.textContent = row[tsKey];
+        const tsRaw = row[tsKey];              // 如 "2025-10-01 00:10"
+        let dateStr = String(tsRaw);
+
+        const datePart = dateStr.split(/[ T]/)[0];  // "2025-10-01"
+        dateStr = datePart.replace(/-/g, "/");      // "2025/10/01"
+
+        currentTimeEl.textContent = dateStr;
+
         setStatus(
-          `动画：${idx + 1} / ${animRows.length} · 时间 = ${row[tsKey]}`
+          `动画：${idx + 1} / ${animRows.length} · 时间 = ${tsRaw}`
         );
       } else {
         currentTimeEl.textContent = "--";
         setStatus(`动画：${idx + 1} / ${animRows.length}`);
       }
+
+      // === 风速显示：保留 1 位小数 ===
+      if (currentSpeedEl) {
+        const num = parseFloat(speedVal);
+        currentSpeedEl.textContent = isFinite(num) ? num.toFixed(1) : "--";
+      }
+
+      // 滑块位置
       timeSlider.value = idx;
     }
 
@@ -581,7 +607,7 @@
       // 风速 → 粗细
       const lineWidth = Math.min(14, 6 + speed);  // 最大 14 像素
 
-      // 风速 → 箭头长度（更夸张一点更好看）
+      // 风速 → 箭头长度
       const lenKm = Math.max(0.4, speed * 0.5);
 
       // 角度换算
