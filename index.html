@@ -221,14 +221,15 @@
           </div>
           <div class="btn-group">
             <button id="prevBtn">◀ 上一条</button>
-            <button id="playPauseBtn" class="primary">⏸ 暂停</button>
+            <!-- 初始文案改成“播放”，逻辑更直观 -->
+            <button id="playPauseBtn" class="primary">▶ 播放</button>
             <button id="nextBtn">下一条 ▶</button>
           </div>
         </div>
         <div class="map-controls-row">
           <div>时间位置：</div>
           <div class="slider-wrap">
-            <input type="range" id="timeSlider" min="0" max="0" value="0" />
+            <input type="range" id="timeSlider" min="0" max="0" value="0" step="1" />
           </div>
         </div>
         <div class="status">
@@ -269,7 +270,8 @@
       mapZoom: 12,
     };
 
-    // 根据 CSV 表头：WD_AV (deg), WS_AV (m/s)
+    // ★★ 如果你的 CSV 表头不是下面两个名字，请改成和 CSV 一样 ★★
+    // 例如：把 "WS_AV (m/s)" 改成 "WS_AVG" 等，必须一模一样
     const WIND_FIELDS = {
       dir: "WD_AV (deg)",    // 风向列名
       speed: "WS_AV (m/s)",  // 风速列名
@@ -292,7 +294,8 @@
     let animRows = [];   // 用于动画的行
     let animIndex = 0;   // 当前播放到第几条
     let animTimer = null;
-    let isPlaying = true;
+    // ★ 初始设成“暂停状态”，需要你点“播放”才开始
+    let isPlaying = false;
     const ANIM_INTERVAL = 1000; // 每帧间隔（毫秒）
 
     function setStatus(msg) {
@@ -373,7 +376,7 @@
             rawRows = rows;
             setStatus(`加载成功：${rows.length} 行 · ${Object.keys(rows[0]).length} 列`);
             renderTable(rows);
-            startWindAnimation(rows);   // 加载完成后启动动画
+            startWindAnimation(rows);   // 加载完成后可以播放
           },
           error: (err) => {
             setStatus("解析失败：" + err.message);
@@ -466,7 +469,7 @@
       });
 
       if (!animRows.length) {
-        setStatus("找不到包含有效风向/风速的数据行");
+        setStatus("找不到包含有效风向/风速的数据行（请检查列名是否与代码一致）");
         return;
       }
 
@@ -474,9 +477,16 @@
       timeSlider.min = 0;
       timeSlider.max = animRows.length - 1;
       timeSlider.value = 0;
+      timeSlider.step = 1;
+
+      // 先画出第 1 帧，让你能马上看到时间和风速
+      drawSingleArrow(animRows[0]);
+      updateTimeUI(animRows[0], 0);
+
+      // 默认开始播放
       isPlaying = true;
       playPauseBtn.textContent = "⏸ 暂停";
-      stepWindAnimation();  // 播放第一帧
+      stepWindAnimation();  // 播放后续帧
     }
 
     function stepWindAnimation() {
@@ -493,14 +503,16 @@
       }
     }
 
-    // 更新“日期 + 风速”显示 & 滑块
+    // ========= 更新时间 + 风速 + 滑块位置 =========
     function updateTimeUI(row, idx) {
-      // 1. 找时间字段（Timestamp）
-      const tsKey = Object.keys(row).find((k) =>
-        k.toLowerCase().includes("timestamp")
-      );
+      // 1. 尝试自动识别“时间”这一列名
+      //   优先：包含 timestamp，其次 time，再其次 date
+      const keys = Object.keys(row);
+      const tsKey =
+        keys.find((k) => /timestamp/i.test(k)) ||
+        keys.find((k) => /time/i.test(k)) ||
+        keys.find((k) => /date/i.test(k));
 
-      // 2. 找风速字段
       const spdKey = WIND_FIELDS.speed;
       const speedVal = row[spdKey];
 
@@ -515,11 +527,11 @@
         currentTimeEl.textContent = dateStr;
 
         setStatus(
-          `动画：${idx + 1} / ${animRows.length} · 时间 = ${tsRaw}`
+          `动画：${idx + 1} / ${animRows.length} · 原始时间 = ${tsRaw}`
         );
       } else {
         currentTimeEl.textContent = "--";
-        setStatus(`动画：${idx + 1} / ${animRows.length}`);
+        setStatus(`动画：${idx + 1} / ${animRows.length}（找不到时间列）`);
       }
 
       // === 风速显示：保留 1 位小数 ===
@@ -528,7 +540,7 @@
         currentSpeedEl.textContent = isFinite(num) ? num.toFixed(1) : "--";
       }
 
-      // 滑块位置
+      // === 进度条位置 ===
       timeSlider.value = idx;
     }
 
