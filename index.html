@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PWS · 新海浜地图 + 风速/风向动画箭头</title>
+  <title>PWS · 新海浜地图 + CSV表格 + 风速/风向箭头</title>
 
   <!-- Leaflet & PapaParse：从 CDN 加载 -->
   <link
@@ -199,7 +199,7 @@
 </head>
 <body>
   <header>
-    <h1>PWS · 新海浜地图 + 风速数据动画箭头</h1>
+    <h1>PWS · 新海浜地图 + CSV风速数据</h1>
     <div class="toolbar">
       <label>年份</label>
       <select id="yearSel"></select>
@@ -279,7 +279,7 @@
       mapZoom: 12,
     };
 
-    // ★★ 这里的列名和你的 CSV 一致 ★★
+    // ★★ 和 CSV 表头一致 ★★
     const WIND_FIELDS = {
       dir: "WD_AV (deg)",    // 风向列名
       speed: "WS_AV (m/s)",  // 风速列名
@@ -383,7 +383,7 @@
             rawRows = rows;
             setStatus(`加载成功：${rows.length} 行 · ${Object.keys(rows[0]).length} 列`);
             renderTable(rows);
-            // 加载完初始化动画（此时会画出第一帧）
+            // 初始化动画
             startWindAnimation(rows);
           },
           error: (err) => {
@@ -511,8 +511,9 @@
       }
     }
 
-    // ========= 更新时间 + 风速 + 滑块位置 =========
+    // 更新“日期 + 风速”显示 & 滑块
     function updateTimeUI(row, idx) {
+      // 找时间字段（优先 Timestamp）
       const keys = Object.keys(row);
       const tsKey =
         keys.find((k) => /timestamp/i.test(k)) ||
@@ -524,10 +525,12 @@
 
       // 日期处理：只显示 年/月/日
       if (tsKey) {
-        const tsRaw = row[tsKey];
+        const tsRaw = row[tsKey];              // 如 "2025-10-01 00:10"
         let dateStr = String(tsRaw);
+
         const datePart = dateStr.split(/[ T]/)[0];  // "2025-10-01"
-        dateStr = datePart.replace(/-/g, "/");
+        dateStr = datePart.replace(/-/g, "/");      // "2025/10/01"
+
         currentTimeEl.textContent = dateStr;
 
         setStatus(
@@ -600,7 +603,7 @@
     });
 
     playPauseBtn.addEventListener("click", () => {
-      // ★ 兜底逻辑：如果动画数组还没准备好，但原始数据有，就在这里初始化
+      // 兜底：如果动画数组还没准备好，但原始数据有，就在这里初始化
       if (!animRows.length) {
         if (rawRows.length) {
           startWindAnimation(rawRows);
@@ -677,7 +680,7 @@
         lineCap: "round",
       }).addTo(arrowLayer);
 
-      // 终点圆点（看起来更像“箭头头部”）
+      // 终点圆点（代替箭头头部）
       L.circleMarker(end, {
         radius: 6,
         color: color,
