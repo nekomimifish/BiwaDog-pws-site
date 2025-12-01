@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PWS · 新海浜地图 + CSV表格 + 风速/风向箭头</title>
+  <title>PWS · 新海浜地图 + 风速/风向动画箭头</title>
 
   <!-- Leaflet & PapaParse：从 CDN 加载 -->
   <link
@@ -11,8 +11,6 @@
     href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
   />
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- 箭头头部专用插件 -->
-  <script src="https://cdn.jsdelivr.net/npm/leaflet-polylinedecorator@1.7.0/dist/leaflet.polylineDecorator.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
   <style>
@@ -43,8 +41,8 @@
       margin: 0;
       background: var(--bg);
       color: var(--text);
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-        Arial, "Noto Sans JP", "Noto Sans SC", sans-serif;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, "Noto Sans JP", "Noto Sans SC", sans-serif;
     }
     header {
       padding: 12px 14px;
@@ -76,6 +74,7 @@
       border-radius: 8px;
       background: var(--panel);
       color: var(--text);
+      font-size: 12px;
     }
     button {
       padding: 6px 10px;
@@ -93,6 +92,10 @@
     }
     button.ghost {
       background: transparent;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
     main {
       max-width: 1200px;
@@ -196,7 +199,7 @@
 </head>
 <body>
   <header>
-    <h1>PWS · 新海浜地图 + CSV风速数据</h1>
+    <h1>PWS · 新海浜地图 + 风速数据动画箭头</h1>
     <div class="toolbar">
       <label>年份</label>
       <select id="yearSel"></select>
@@ -221,7 +224,6 @@
           </div>
           <div class="btn-group">
             <button id="prevBtn">◀ 上一条</button>
-            <!-- 初始文案改成“播放”，逻辑更直观 -->
             <button id="playPauseBtn" class="primary">▶ 播放</button>
             <button id="nextBtn">下一条 ▶</button>
           </div>
@@ -229,7 +231,14 @@
         <div class="map-controls-row">
           <div>时间位置：</div>
           <div class="slider-wrap">
-            <input type="range" id="timeSlider" min="0" max="0" value="0" step="1" />
+            <input
+              type="range"
+              id="timeSlider"
+              min="0"
+              max="0"
+              value="0"
+              step="1"
+            />
           </div>
         </div>
         <div class="status">
@@ -270,8 +279,7 @@
       mapZoom: 12,
     };
 
-    // ★★ 如果你的 CSV 表头不是下面两个名字，请改成和 CSV 一样 ★★
-    // 例如：把 "WS_AV (m/s)" 改成 "WS_AVG" 等，必须一模一样
+    // ★★ 这里的列名和你的 CSV 一致 ★★
     const WIND_FIELDS = {
       dir: "WD_AV (deg)",    // 风向列名
       speed: "WS_AV (m/s)",  // 风速列名
@@ -294,8 +302,7 @@
     let animRows = [];   // 用于动画的行
     let animIndex = 0;   // 当前播放到第几条
     let animTimer = null;
-    // ★ 初始设成“暂停状态”，需要你点“播放”才开始
-    let isPlaying = false;
+    let isPlaying = false;  // 初始为不播放状态
     const ANIM_INTERVAL = 1000; // 每帧间隔（毫秒）
 
     function setStatus(msg) {
@@ -318,13 +325,13 @@
       attribution: "&copy; OpenStreetMap",
     }).addTo(map);
 
-    // 测站点
+    // 测站点标记
     L.marker([CONFIG.station.lat, CONFIG.station.lng])
       .addTo(map)
       .bindPopup(CONFIG.station.name)
       .openPopup();
 
-    // 箭头图层（只显示一个箭头）
+    // 箭头图层（只显示一个）
     const arrowLayer = L.layerGroup().addTo(map);
 
     // ========= 年月下拉 =========
@@ -340,7 +347,7 @@
       for (let m = 0; m < 12; m++) {
         const opt = document.createElement("option");
         opt.value = m;
-        opt.textContent = m + 1 + " 月";
+        opt.textContent = (m + 1) + " 月";
         if (m === now.getMonth()) opt.selected = true;
         monSel.appendChild(opt);
       }
@@ -376,7 +383,8 @@
             rawRows = rows;
             setStatus(`加载成功：${rows.length} 行 · ${Object.keys(rows[0]).length} 列`);
             renderTable(rows);
-            startWindAnimation(rows);   // 加载完成后可以播放
+            // 加载完初始化动画（此时会画出第一帧）
+            startWindAnimation(rows);
           },
           error: (err) => {
             setStatus("解析失败：" + err.message);
@@ -421,7 +429,7 @@
       });
     }
 
-    // 简单搜索：全列模糊匹配 + 动画基于过滤结果
+    // ========= 搜索过滤 =========
     searchInput.addEventListener("input", () => {
       const q = searchInput.value.trim().toLowerCase();
       if (!rawRows.length) return;
@@ -479,14 +487,14 @@
       timeSlider.value = 0;
       timeSlider.step = 1;
 
-      // 先画出第 1 帧，让你能马上看到时间和风速
+      // 先画出第 1 帧，让你立刻看到时间和风速
       drawSingleArrow(animRows[0]);
       updateTimeUI(animRows[0], 0);
 
-      // 默认开始播放
-      isPlaying = true;
-      playPauseBtn.textContent = "⏸ 暂停";
-      stepWindAnimation();  // 播放后续帧
+      // 初始化后保持“暂停”，等你按 ▶ 播放
+      stopWindAnimation();
+      isPlaying = false;
+      playPauseBtn.textContent = "▶ 播放";
     }
 
     function stepWindAnimation() {
@@ -505,8 +513,6 @@
 
     // ========= 更新时间 + 风速 + 滑块位置 =========
     function updateTimeUI(row, idx) {
-      // 1. 尝试自动识别“时间”这一列名
-      //   优先：包含 timestamp，其次 time，再其次 date
       const keys = Object.keys(row);
       const tsKey =
         keys.find((k) => /timestamp/i.test(k)) ||
@@ -516,14 +522,12 @@
       const spdKey = WIND_FIELDS.speed;
       const speedVal = row[spdKey];
 
-      // === 日期处理：只显示 年/月/日 ===
+      // 日期处理：只显示 年/月/日
       if (tsKey) {
-        const tsRaw = row[tsKey];              // 如 "2025-10-01 00:10"
+        const tsRaw = row[tsKey];
         let dateStr = String(tsRaw);
-
         const datePart = dateStr.split(/[ T]/)[0];  // "2025-10-01"
-        dateStr = datePart.replace(/-/g, "/");      // "2025/10/01"
-
+        dateStr = datePart.replace(/-/g, "/");
         currentTimeEl.textContent = dateStr;
 
         setStatus(
@@ -534,13 +538,13 @@
         setStatus(`动画：${idx + 1} / ${animRows.length}（找不到时间列）`);
       }
 
-      // === 风速显示：保留 1 位小数 ===
+      // 风速显示：保留 1 位小数
       if (currentSpeedEl) {
         const num = parseFloat(speedVal);
         currentSpeedEl.textContent = isFinite(num) ? num.toFixed(1) : "--";
       }
 
-      // === 进度条位置 ===
+      // 进度条位置
       timeSlider.value = idx;
     }
 
@@ -552,14 +556,22 @@
       const row = animRows[idx];
       drawSingleArrow(row);
       updateTimeUI(row, idx);
-      // 用户手动拖动时自动暂停
+      // 手动拖动时暂停播放
       stopWindAnimation();
       isPlaying = false;
       playPauseBtn.textContent = "▶ 播放";
     });
 
     prevBtn.addEventListener("click", () => {
-      if (!animRows.length) return;
+      if (!animRows.length) {
+        if (rawRows.length) {
+          // 如果还没初始化动画但已经有数据，就顺便初始化
+          startWindAnimation(rawRows);
+        } else {
+          alert("请先点击“加载 CSV”按钮");
+          return;
+        }
+      }
       stopWindAnimation();
       isPlaying = false;
       playPauseBtn.textContent = "▶ 播放";
@@ -570,7 +582,14 @@
     });
 
     nextBtn.addEventListener("click", () => {
-      if (!animRows.length) return;
+      if (!animRows.length) {
+        if (rawRows.length) {
+          startWindAnimation(rawRows);
+        } else {
+          alert("请先点击“加载 CSV”按钮");
+          return;
+        }
+      }
       stopWindAnimation();
       isPlaying = false;
       playPauseBtn.textContent = "▶ 播放";
@@ -581,21 +600,30 @@
     });
 
     playPauseBtn.addEventListener("click", () => {
-      if (!animRows.length) return;
+      // ★ 兜底逻辑：如果动画数组还没准备好，但原始数据有，就在这里初始化
+      if (!animRows.length) {
+        if (rawRows.length) {
+          startWindAnimation(rawRows);
+        } else {
+          alert("请先点击“加载 CSV”按钮");
+          return;
+        }
+      }
+
       if (isPlaying) {
-        // 改为暂停
+        // 现在是播放状态 -> 改为暂停
         stopWindAnimation();
         isPlaying = false;
         playPauseBtn.textContent = "▶ 播放";
       } else {
-        // 从当前 animIndex 继续播放
+        // 现在是暂停 -> 开始播放
         isPlaying = true;
         playPauseBtn.textContent = "⏸ 暂停";
         stepWindAnimation();
       }
     });
 
-    // ========= 画单个箭头（超粗 + 带箭头头部 + 颜色随风速） =========
+    // ========= 画单个箭头（简化版：粗线 + 终点圆点） =========
     function drawSingleArrow(row) {
       const dirKey = WIND_FIELDS.dir;
       const spdKey = WIND_FIELDS.speed;
@@ -610,16 +638,16 @@
       const baseLat = CONFIG.station.lat;
       const baseLng = CONFIG.station.lng;
 
-      // 风速 → 颜色（绿-黄-红）
+      // 风速决定颜色
       let color;
       if (speed < 3) color = "#2ecc71";       // 低风速：绿
       else if (speed < 7) color = "#f1c40f";  // 中风：黄
-      else color = "#e74c3c";                 // 高风速：红
+      else color = "#e74c3c";                 // 高风：红
 
-      // 风速 → 粗细
-      const lineWidth = Math.min(14, 6 + speed);  // 最大 14 像素
+      // 风速决定粗细
+      const lineWidth = Math.min(14, 6 + speed);
 
-      // 风速 → 箭头长度
+      // 风速决定长度（km）
       const lenKm = Math.max(0.4, speed * 0.5);
 
       // 角度换算
@@ -642,32 +670,20 @@
       }).addTo(arrowLayer);
 
       // 主体粗线
-      const mainLine = L.polyline([start, end], {
+      L.polyline([start, end], {
         weight: lineWidth,
         color: color,
         opacity: 1,
         lineCap: "round",
       }).addTo(arrowLayer);
 
-      // 箭头头部（大三角形）
-      L.polylineDecorator(mainLine, {
-        patterns: [
-          {
-            offset: '100%',
-            repeat: 0,
-            symbol: L.Symbol.arrowHead({
-              pixelSize: Math.min(40, 20 + speed * 4),  // 尖端大小随风速变化
-              polygon: true,
-              pathOptions: {
-                stroke: true,
-                weight: lineWidth,
-                color: color,
-                fillColor: color,
-                fillOpacity: 1.0,
-              },
-            }),
-          },
-        ],
+      // 终点圆点（看起来更像“箭头头部”）
+      L.circleMarker(end, {
+        radius: 6,
+        color: color,
+        fillColor: color,
+        fillOpacity: 1,
+        weight: 2,
       }).addTo(arrowLayer);
     }
   </script>
