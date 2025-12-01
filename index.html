@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PWS · 新海浜地图 + CSV表格 + 风速/风向箭头</title>
+  <title>PWS · 新海浜地图 + CSV风速数据</title>
 
   <!-- Leaflet & PapaParse：从 CDN 加载 -->
   <link
@@ -97,6 +97,19 @@
       opacity: 0.5;
       cursor: not-allowed;
     }
+    .csv-link {
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--grid);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 12px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .csv-link:hover {
+      background: var(--hover);
+    }
     main {
       max-width: 1200px;
       margin: 0 auto;
@@ -122,6 +135,9 @@
       border: 1px solid var(--grid);
       border-radius: 12px;
       padding: 10px;
+    }
+    .map-card {
+      position: relative; /* 让图例可以绝对定位在卡片内部 */
     }
     #map {
       height: 60vh;
@@ -195,6 +211,52 @@
     .spacer {
       flex: 1;
     }
+
+    /* 图例样式 */
+    .legend {
+      position: absolute;
+      right: 14px;
+      bottom: 14px;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 8px;
+      border: 1px solid var(--grid);
+      padding: 8px 10px;
+      font-size: 11px;
+      color: #333;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    }
+    .dark .legend {
+      background: rgba(16, 24, 32, 0.9);
+      color: #e0ecff;
+    }
+    .legend-title {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 2px 0;
+    }
+    .legend-color {
+      width: 14px;
+      height: 8px;
+      border-radius: 999px;
+      border: 1px solid #ccc;
+    }
+    .legend-low {
+      background: #2ecc71;
+      border-color: #29b866;
+    }
+    .legend-mid {
+      background: #f1c40f;
+      border-color: #d0a90c;
+    }
+    .legend-high {
+      background: #e74c3c;
+      border-color: #c0392b;
+    }
   </style>
 </head>
 <body>
@@ -206,6 +268,7 @@
       <label>月份</label>
       <select id="monSel"></select>
       <button id="loadBtn" class="primary">加载 ./data/YYYY-MM.csv</button>
+      <a id="csvDownload" class="csv-link" href="#" download>下载当前 CSV</a>
       <span id="status" class="status"></span>
       <div class="spacer"></div>
       <button id="themeBtn" class="ghost">切换深色/浅色</button>
@@ -214,8 +277,26 @@
 
   <main class="layout">
     <!-- 上/左：地图 -->
-    <section class="card">
+    <section class="card map-card">
       <div id="map"></div>
+
+      <!-- 颜色图例 -->
+      <div class="legend">
+        <div class="legend-title">风速颜色图例</div>
+        <div class="legend-row">
+          <span class="legend-color legend-low"></span>
+          <span>&lt; 3 m/s（低风）</span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-color legend-mid"></span>
+          <span>3 – 7 m/s（中风）</span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-color legend-high"></span>
+          <span>≥ 7 m/s（高风）</span>
+        </div>
+      </div>
+
       <div class="map-controls">
         <div class="map-controls-row">
           <div class="time-label">
@@ -297,6 +378,7 @@
     const prevBtn = document.getElementById("prevBtn");
     const nextBtn = document.getElementById("nextBtn");
     const playPauseBtn = document.getElementById("playPauseBtn");
+    const csvDownload = document.getElementById("csvDownload");
 
     let rawRows = [];    // 原始 CSV 行
     let animRows = [];   // 用于动画的行
@@ -313,382 +395,4 @@
     document.getElementById("themeBtn").addEventListener("click", () => {
       document.body.classList.toggle("dark");
       const btn = document.getElementById("themeBtn");
-      btn.textContent = document.body.classList.contains("dark")
-        ? "切换为浅色"
-        : "切换深色/浅色";
-    });
-
-    // ========= 初始化地图 =========
-    const map = L.map("map").setView(CONFIG.mapCenter, CONFIG.mapZoom);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap",
-    }).addTo(map);
-
-    // 测站点标记
-    L.marker([CONFIG.station.lat, CONFIG.station.lng])
-      .addTo(map)
-      .bindPopup(CONFIG.station.name)
-      .openPopup();
-
-    // 箭头图层（只显示一个）
-    const arrowLayer = L.layerGroup().addTo(map);
-
-    // ========= 年月下拉 =========
-    (function initYM() {
-      const now = new Date();
-      for (let y = now.getFullYear() - 5; y <= now.getFullYear() + 2; y++) {
-        const opt = document.createElement("option");
-        opt.value = y;
-        opt.textContent = y;
-        if (y === now.getFullYear()) opt.selected = true;
-        yearSel.appendChild(opt);
-      }
-      for (let m = 0; m < 12; m++) {
-        const opt = document.createElement("option");
-        opt.value = m;
-        opt.textContent = (m + 1) + " 月";
-        if (m === now.getMonth()) opt.selected = true;
-        monSel.appendChild(opt);
-      }
-    })();
-
-    // ========= 读取 CSV =========
-    async function loadCSV() {
-      const y = parseInt(yearSel.value, 10);
-      const m = parseInt(monSel.value, 10) + 1;
-      const path = `./data/${String(y)}-${String(m).padStart(2, "0")}.csv`;
-
-      setStatus(`请求 ${path} ...`);
-
-      try {
-        const res = await fetch(`${path}?t=${Date.now()}`, { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const text = await res.text();
-
-        Papa.parse(text, {
-          header: true,
-          skipEmptyLines: true,
-          dynamicTyping: false,
-          complete: (parsed) => {
-            const rows = parsed.data || [];
-            if (!rows.length) {
-              setStatus("CSV 为空");
-              rawRows = [];
-              renderTable([]);
-              stopWindAnimation();
-              arrowLayer.clearLayers();
-              return;
-            }
-            rawRows = rows;
-            setStatus(`加载成功：${rows.length} 行 · ${Object.keys(rows[0]).length} 列`);
-            renderTable(rows);
-            // 初始化动画
-            startWindAnimation(rows);
-          },
-          error: (err) => {
-            setStatus("解析失败：" + err.message);
-          },
-        });
-      } catch (err) {
-        console.error(err);
-        setStatus(`加载失败：${path}（${err.message}）`);
-      }
-    }
-
-    document.getElementById("loadBtn").addEventListener("click", loadCSV);
-
-    // ========= 表格渲染 =========
-    function renderTable(rows) {
-      tableHead.innerHTML = "";
-      tableBody.innerHTML = "";
-
-      if (!rows || !rows.length) return;
-
-      const headers = Object.keys(rows[0]);
-
-      // 表头
-      const trHead = document.createElement("tr");
-      headers.forEach((h) => {
-        const th = document.createElement("th");
-        th.textContent = h;
-        trHead.appendChild(th);
-      });
-      tableHead.appendChild(trHead);
-
-      // 表身
-      rows.forEach((row) => {
-        const tr = document.createElement("tr");
-        headers.forEach((h) => {
-          const td = document.createElement("td");
-          const v = row[h];
-          td.textContent = v == null ? "" : String(v);
-          tr.appendChild(td);
-        });
-        tableBody.appendChild(tr);
-      });
-    }
-
-    // ========= 搜索过滤 =========
-    searchInput.addEventListener("input", () => {
-      const q = searchInput.value.trim().toLowerCase();
-      if (!rawRows.length) return;
-
-      if (!q) {
-        renderTable(rawRows);
-        startWindAnimation(rawRows);
-        return;
-      }
-      const filtered = rawRows.filter((row) =>
-        Object.values(row).some(
-          (v) => v != null && String(v).toLowerCase().includes(q)
-        )
-      );
-      renderTable(filtered);
-      startWindAnimation(filtered);
-    });
-
-    // ========= 动画控制 =========
-    function stopWindAnimation() {
-      if (animTimer !== null) {
-        clearTimeout(animTimer);
-        animTimer = null;
-      }
-    }
-
-    function startWindAnimation(rows) {
-      stopWindAnimation();
-      arrowLayer.clearLayers();
-
-      if (!rows || !rows.length) {
-        setStatus("无可用于动画的数据行");
-        animRows = [];
-        return;
-      }
-
-      const dirKey = WIND_FIELDS.dir;
-      const spdKey = WIND_FIELDS.speed;
-
-      // 过滤掉无效风向/风速
-      animRows = rows.filter((r) => {
-        const d = parseFloat(r[dirKey]);
-        const s = parseFloat(r[spdKey]);
-        return isFinite(d) && isFinite(s);
-      });
-
-      if (!animRows.length) {
-        setStatus("找不到包含有效风向/风速的数据行（请检查列名是否与代码一致）");
-        return;
-      }
-
-      animIndex = 0;
-      timeSlider.min = 0;
-      timeSlider.max = animRows.length - 1;
-      timeSlider.value = 0;
-      timeSlider.step = 1;
-
-      // 先画出第 1 帧，让你立刻看到时间和风速
-      drawSingleArrow(animRows[0]);
-      updateTimeUI(animRows[0], 0);
-
-      // 初始化后保持“暂停”，等你按 ▶ 播放
-      stopWindAnimation();
-      isPlaying = false;
-      playPauseBtn.textContent = "▶ 播放";
-    }
-
-    function stepWindAnimation() {
-      if (!animRows.length) return;
-
-      const row = animRows[animIndex];
-      drawSingleArrow(row);
-      updateTimeUI(row, animIndex);
-
-      animIndex = (animIndex + 1) % animRows.length;
-
-      if (isPlaying) {
-        animTimer = setTimeout(stepWindAnimation, ANIM_INTERVAL);
-      }
-    }
-
-    // 更新“日期 + 风速”显示 & 滑块
-    function updateTimeUI(row, idx) {
-      // 找时间字段（优先 Timestamp）
-      const keys = Object.keys(row);
-      const tsKey =
-        keys.find((k) => /timestamp/i.test(k)) ||
-        keys.find((k) => /time/i.test(k)) ||
-        keys.find((k) => /date/i.test(k));
-
-      const spdKey = WIND_FIELDS.speed;
-      const speedVal = row[spdKey];
-
-      // 日期处理：只显示 年/月/日
-      if (tsKey) {
-        const tsRaw = row[tsKey];              // 如 "2025-10-01 00:10"
-        let dateStr = String(tsRaw);
-
-        const datePart = dateStr.split(/[ T]/)[0];  // "2025-10-01"
-        dateStr = datePart.replace(/-/g, "/");      // "2025/10/01"
-
-        currentTimeEl.textContent = dateStr;
-
-        setStatus(
-          `动画：${idx + 1} / ${animRows.length} · 原始时间 = ${tsRaw}`
-        );
-      } else {
-        currentTimeEl.textContent = "--";
-        setStatus(`动画：${idx + 1} / ${animRows.length}（找不到时间列）`);
-      }
-
-      // 风速显示：保留 1 位小数
-      if (currentSpeedEl) {
-        const num = parseFloat(speedVal);
-        currentSpeedEl.textContent = isFinite(num) ? num.toFixed(1) : "--";
-      }
-
-      // 进度条位置
-      timeSlider.value = idx;
-    }
-
-    // ========= 时间控制 UI：滑块 & 按钮 =========
-    timeSlider.addEventListener("input", () => {
-      if (!animRows.length) return;
-      const idx = parseInt(timeSlider.value, 10);
-      animIndex = idx;
-      const row = animRows[idx];
-      drawSingleArrow(row);
-      updateTimeUI(row, idx);
-      // 手动拖动时暂停播放
-      stopWindAnimation();
-      isPlaying = false;
-      playPauseBtn.textContent = "▶ 播放";
-    });
-
-    prevBtn.addEventListener("click", () => {
-      if (!animRows.length) {
-        if (rawRows.length) {
-          // 如果还没初始化动画但已经有数据，就顺便初始化
-          startWindAnimation(rawRows);
-        } else {
-          alert("请先点击“加载 CSV”按钮");
-          return;
-        }
-      }
-      stopWindAnimation();
-      isPlaying = false;
-      playPauseBtn.textContent = "▶ 播放";
-      animIndex = (animIndex - 1 + animRows.length) % animRows.length;
-      const row = animRows[animIndex];
-      drawSingleArrow(row);
-      updateTimeUI(row, animIndex);
-    });
-
-    nextBtn.addEventListener("click", () => {
-      if (!animRows.length) {
-        if (rawRows.length) {
-          startWindAnimation(rawRows);
-        } else {
-          alert("请先点击“加载 CSV”按钮");
-          return;
-        }
-      }
-      stopWindAnimation();
-      isPlaying = false;
-      playPauseBtn.textContent = "▶ 播放";
-      animIndex = (animIndex + 1) % animRows.length;
-      const row = animRows[animIndex];
-      drawSingleArrow(row);
-      updateTimeUI(row, animIndex);
-    });
-
-    playPauseBtn.addEventListener("click", () => {
-      // 兜底：如果动画数组还没准备好，但原始数据有，就在这里初始化
-      if (!animRows.length) {
-        if (rawRows.length) {
-          startWindAnimation(rawRows);
-        } else {
-          alert("请先点击“加载 CSV”按钮");
-          return;
-        }
-      }
-
-      if (isPlaying) {
-        // 现在是播放状态 -> 改为暂停
-        stopWindAnimation();
-        isPlaying = false;
-        playPauseBtn.textContent = "▶ 播放";
-      } else {
-        // 现在是暂停 -> 开始播放
-        isPlaying = true;
-        playPauseBtn.textContent = "⏸ 暂停";
-        stepWindAnimation();
-      }
-    });
-
-    // ========= 画单个箭头（简化版：粗线 + 终点圆点） =========
-    function drawSingleArrow(row) {
-      const dirKey = WIND_FIELDS.dir;
-      const spdKey = WIND_FIELDS.speed;
-
-      const dirDeg = parseFloat(row[dirKey]); // 风向（度）
-      const speed  = parseFloat(row[spdKey]); // 风速（m/s）
-
-      if (!isFinite(dirDeg) || !isFinite(speed)) return;
-
-      arrowLayer.clearLayers();
-
-      const baseLat = CONFIG.station.lat;
-      const baseLng = CONFIG.station.lng;
-
-      // 风速决定颜色
-      let color;
-      if (speed < 3) color = "#2ecc71";       // 低风速：绿
-      else if (speed < 7) color = "#f1c40f";  // 中风：黄
-      else color = "#e74c3c";                 // 高风：红
-
-      // 风速决定粗细
-      const lineWidth = Math.min(14, 6 + speed);
-
-      // 风速决定长度（km）
-      const lenKm = Math.max(0.4, speed * 0.5);
-
-      // 角度换算
-      const rad = ((dirDeg - 90) * Math.PI) / 180;
-      const dLat = (lenKm * Math.sin(rad)) / 111;
-      const dLng =
-        (lenKm * Math.cos(rad)) /
-        (111 * Math.cos((baseLat * Math.PI) / 180));
-
-      const start = L.latLng(baseLat, baseLng);
-      const end   = L.latLng(baseLat + dLat, baseLng + dLng);
-
-      // 起点小圆点
-      L.circleMarker(start, {
-        radius: 5,
-        color: color,
-        fillColor: color,
-        fillOpacity: 1,
-        weight: 2,
-      }).addTo(arrowLayer);
-
-      // 主体粗线
-      L.polyline([start, end], {
-        weight: lineWidth,
-        color: color,
-        opacity: 1,
-        lineCap: "round",
-      }).addTo(arrowLayer);
-
-      // 终点圆点（代替箭头头部）
-      L.circleMarker(end, {
-        radius: 6,
-        color: color,
-        fillColor: color,
-        fillOpacity: 1,
-        weight: 2,
-      }).addTo(arrowLayer);
-    }
-  </script>
-</body>
-</html>
+      btn.textContent = document.body.classLis
