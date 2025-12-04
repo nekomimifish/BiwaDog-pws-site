@@ -137,7 +137,7 @@
       padding: 10px;
     }
     .map-card {
-      position: relative; /* 让图例可以绝对定位在卡片内部 */
+      position: relative; /* 为图例绝对定位准备 */
     }
     #map {
       height: 60vh;
@@ -268,6 +268,7 @@
       <label>月份</label>
       <select id="monSel"></select>
       <button id="loadBtn" class="primary">加载 ./data/YYYY-MM.csv</button>
+      <!-- CSV 下载按钮 -->
       <a id="csvDownload" class="csv-link" href="#" download>下载当前 CSV</a>
       <span id="status" class="status"></span>
       <div class="spacer"></div>
@@ -280,7 +281,7 @@
     <section class="card map-card">
       <div id="map"></div>
 
-      <!-- 颜色图例 -->
+      <!-- 风速颜色图例 -->
       <div class="legend">
         <div class="legend-title">风速颜色图例</div>
         <div class="legend-row">
@@ -360,7 +361,7 @@
       mapZoom: 12,
     };
 
-    // ★★ 和 CSV 表头一致 ★★
+    // 和 CSV 表头一致
     const WIND_FIELDS = {
       dir: "WD_AV (deg)",    // 风向列名
       speed: "WS_AV (m/s)",  // 风速列名
@@ -395,4 +396,401 @@
     document.getElementById("themeBtn").addEventListener("click", () => {
       document.body.classList.toggle("dark");
       const btn = document.getElementById("themeBtn");
-      btn.textContent = document.body.classLis
+      btn.textContent = document.body.classList.contains("dark")
+        ? "切换为浅色"
+        : "切换深色/浅色";
+    });
+
+    // ========= 初始化地图 =========
+    const map = L.map("map").setView(CONFIG.mapCenter, CONFIG.mapZoom);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap",
+    }).addTo(map);
+
+    // 测站点标记
+    L.marker([CONFIG.station.lat, CONFIG.station.lng])
+      .addTo(map)
+      .bindPopup(CONFIG.station.name)
+      .openPopup();
+
+    // 箭头图层（只显示一个）
+    const arrowLayer = L.layerGroup().addTo(map);
+
+    // ========= 年月下拉 =========
+    (function initYM() {
+      const now = new Date();
+      for (let y = now.getFullYear() - 5; y <= now.getFullYear() + 2; y++) {
+        const opt = document.createElement("option");
+        opt.value = y;
+        opt.textContent = y;
+        if (y === now.getFullYear()) opt.selected = true;
+        yearSel.appendChild(opt);
+      }
+      for (let m = 0; m < 12; m++) {
+        const opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = (m + 1) + " 月";
+        if (m === now.getMonth()) opt.selected = true;
+        monSel.appendChild(opt);
+      }
+    })();
+
+    // ========= 读取 CSV =========
+    async function loadCSV() {
+      const y = parseInt(yearSel.value, 10);
+      const m = parseInt(monSel.value, 10) + 1;
+      const ymStr = `${String(y)}-${String(m).padStart(2, "0")}`;
+      const path = `./data/${ymStr}.csv`;
+
+      // 更新下载链接：当前选择的年月
+      csvDownload.href = path;
+      csvDownload.download = `${ymStr}.csv`;
+      csvDownload.textContent = `下载 ${ymStr}.csv`;
+
+      setStatus(`请求 ${path} ...`);
+
+      try {
+        const res = await fetch(`${path}?t=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+
+        Papa.parse(text, {
+          header: true,
+          skipEmptyLines: true,
+          dynamicTyping: false,
+          complete: (parsed) => {
+            const rows = parsed.data || [];
+            if (!rows.length) {
+              setStatus("CSV 为空");
+              rawRows = [];
+              renderTable([]);
+              stopWindAnimation();
+              arrowLayer.clearLayers();
+              return;
+            }
+            rawRows = rows;
+            setStatus(`加载成功：${rows.length} 行 · ${Object.keys(rows[0]).length} 列`);
+            renderTable(rows);
+            // 初始化动画
+            startWindAnimation(rows);
+          },
+          error: (err) => {
+            setStatus("解析失败：" + err.message);
+          },
+        });
+      } catch (err) {
+        console.error(err);
+        setStatus(`加载失败：${path}（${err.message}）`);
+      }
+    }
+
+    document.getElementById("loadBtn").addEventListener("click", loadCSV);
+
+    // ========= 表格渲染 =========
+    function renderTable(rows) {
+      tableHead.innerHTML = "";
+      tableBody.innerHTML = "";
+
+      if (!rows || !rows.length) return;
+
+      const headers = Object.keys(rows[0]);
+
+      // 表头
+      const trHead = document.createElement("tr");
+      headers.forEach((h) => {
+        const th = document.createElement("th");
+        th.textContent = h;
+        trHead.appendChild(th);
+      });
+      tableHead.appendChild(trHead);
+
+      // 表身
+      rows.forEach((row) => {
+        const tr = document.createElement("tr");
+        headers.forEach((h) => {
+          const td = document.createElement("td");
+          const v = row[h];
+          td.textContent = v == null ? "" : String(v);
+          tr.appendChild(td);
+        });
+        tableBody.appendChild(tr);
+      });
+    }
+
+    // ========= 搜索过滤 =========
+    searchInput.addEventListener("input", () => {
+      const q = searchInput.value.trim().toLowerCase();
+      if (!rawRows.length) return;
+
+      if (!q) {
+        renderTable(rawRows);
+        startWindAnimation(rawRows);
+        return;
+      }
+      const filtered = rawRows.filter((row) =>
+        Object.values(row).some(
+          (v) => v != null && String(v).toLowerCase().includes(q)
+        )
+      );
+      renderTable(filtered);
+      startWindAnimation(filtered);
+    });
+
+    // ========= 动画控制 =========
+    function stopWindAnimation() {
+      if (animTimer !== null) {
+        clearTimeout(animTimer);
+        animTimer = null;
+      }
+    }
+
+    function startWindAnimation(rows) {
+      stopWindAnimation();
+      arrowLayer.clearLayers();
+
+      if (!rows || !rows.length) {
+        setStatus("无可用于动画的数据行");
+        animRows = [];
+        return;
+      }
+
+      const dirKey = WIND_FIELDS.dir;
+      const spdKey = WIND_FIELDS.speed;
+
+      // 过滤掉无效风向/风速
+      animRows = rows.filter((r) => {
+        const d = parseFloat(r[dirKey]);
+        const s = parseFloat(r[spdKey]);
+        return isFinite(d) && isFinite(s);
+      });
+
+      if (!animRows.length) {
+        setStatus("找不到包含有效风向/风速的数据行（请检查列名是否与代码一致）");
+        return;
+      }
+
+      animIndex = 0;
+      timeSlider.min = 0;
+      timeSlider.max = animRows.length - 1;
+      timeSlider.value = 0;
+      timeSlider.step = 1;
+
+      // 先画出第 1 帧，让你立刻看到时间和风速
+      drawSingleArrow(animRows[0]);
+      updateTimeUI(animRows[0], 0);
+
+      // 初始化后保持“暂停”，等你按 ▶ 播放
+      stopWindAnimation();
+      isPlaying = false;
+      playPauseBtn.textContent = "▶ 播放";
+    }
+
+    function stepWindAnimation() {
+      if (!animRows.length) return;
+
+      const row = animRows[animIndex];
+      drawSingleArrow(row);
+      updateTimeUI(row, animIndex);
+
+      animIndex = (animIndex + 1) % animRows.length;
+
+      if (isPlaying) {
+        animTimer = setTimeout(stepWindAnimation, ANIM_INTERVAL);
+      }
+    }
+
+    // 更新“日期 + 风速”显示 & 滑块
+    function updateTimeUI(row, idx) {
+      // 找时间字段（优先 Timestamp）
+      const keys = Object.keys(row);
+      const tsKey =
+        keys.find((k) => /timestamp/i.test(k)) ||
+        keys.find((k) => /time/i.test(k)) ||
+        keys.find((k) => /date/i.test(k));
+
+      const spdKey = WIND_FIELDS.speed;
+      const speedVal = row[spdKey];
+
+      // 日期处理：只显示 年/月/日
+      if (tsKey) {
+        const tsRaw = row[tsKey];              // 如 "2025/10/01 00:10:00.425"
+        let dateStr = String(tsRaw);
+        const datePart = dateStr.split(/[ T]/)[0];  // "2025/10/01"
+        currentTimeEl.textContent = datePart;
+
+        setStatus(
+          `动画：${idx + 1} / ${animRows.length} · 原始时间 = ${tsRaw}`
+        );
+      } else {
+        currentTimeEl.textContent = "--";
+        setStatus(`动画：${idx + 1} / ${animRows.length}（找不到时间列）`);
+      }
+
+      // 风速显示：保留 1 位小数
+      if (currentSpeedEl) {
+        const num = parseFloat(speedVal);
+        currentSpeedEl.textContent = isFinite(num) ? num.toFixed(1) : "--";
+      }
+
+      // 进度条位置
+      timeSlider.value = idx;
+    }
+
+    // ========= 时间控制 UI：滑块 & 按钮 =========
+    timeSlider.addEventListener("input", () => {
+      if (!animRows.length) return;
+      const idx = parseInt(timeSlider.value, 10);
+      animIndex = idx;
+      const row = animRows[idx];
+      drawSingleArrow(row);
+      updateTimeUI(row, idx);
+      // 手动拖动时暂停播放
+      stopWindAnimation();
+      isPlaying = false;
+      playPauseBtn.textContent = "▶ 播放";
+    });
+
+    prevBtn.addEventListener("click", () => {
+      if (!animRows.length) {
+        if (rawRows.length) {
+          // 如果还没初始化动画但已经有数据，就顺便初始化
+          startWindAnimation(rawRows);
+        } else {
+          alert("请先点击“加载 CSV”按钮");
+          return;
+        }
+      }
+      stopWindAnimation();
+      isPlaying = false;
+      playPauseBtn.textContent = "▶ 播放";
+      animIndex = (animIndex - 1 + animRows.length) % animRows.length;
+      const row = animRows[animIndex];
+      drawSingleArrow(row);
+      updateTimeUI(row, animIndex);
+    });
+
+    nextBtn.addEventListener("click", () => {
+      if (!animRows.length) {
+        if (rawRows.length) {
+          startWindAnimation(rawRows);
+        } else {
+          alert("请先点击“加载 CSV”按钮");
+          return;
+        }
+      }
+      stopWindAnimation();
+      isPlaying = false;
+      playPauseBtn.textContent = "▶ 播放";
+      animIndex = (animIndex + 1) % animRows.length;
+      const row = animRows[animIndex];
+      drawSingleArrow(row);
+      updateTimeUI(row, animIndex);
+    });
+
+    playPauseBtn.addEventListener("click", () => {
+      // 兜底：如果动画数组还没准备好，但原始数据有，就在这里初始化
+      if (!animRows.length) {
+        if (rawRows.length) {
+          startWindAnimation(rawRows);
+        } else {
+          alert("请先点击“加载 CSV”按钮");
+          return;
+        }
+      }
+
+      if (isPlaying) {
+        // 现在是播放状态 -> 改为暂停
+        stopWindAnimation();
+        isPlaying = false;
+        playPauseBtn.textContent = "▶ 播放";
+      } else {
+        // 现在是暂停 -> 开始播放
+        isPlaying = true;
+        playPauseBtn.textContent = "⏸ 暂停";
+        stepWindAnimation();
+      }
+    });
+
+    // ========= 画单个箭头（粗线 + 三角形尖端） =========
+    function drawSingleArrow(row) {
+      const dirKey = WIND_FIELDS.dir;
+      const spdKey = WIND_FIELDS.speed;
+
+      const dirDeg = parseFloat(row[dirKey]); // 风向（度）
+      const speed  = parseFloat(row[spdKey]); // 风速（m/s）
+
+      if (!isFinite(dirDeg) || !isFinite(speed)) return;
+
+      arrowLayer.clearLayers();
+
+      const baseLat = CONFIG.station.lat;
+      const baseLng = CONFIG.station.lng;
+
+      // 风速决定颜色
+      let color;
+      if (speed < 3) color = "#2ecc71";       // 低风速：绿
+      else if (speed < 7) color = "#f1c40f";  // 中风：黄
+      else color = "#e74c3c";                 // 高风：红
+
+      // 风速决定粗细
+      const lineWidth = Math.min(14, 6 + speed);
+
+      // 风速决定长度（km）
+      const lenKm = Math.max(0.4, speed * 0.5);
+
+      // 角度换算（Leaflet: 0° 指向东，我们用 dirDeg-90° 的定义）
+      const rad = ((dirDeg - 90) * Math.PI) / 180;
+
+      // 帮助函数：根据起点 + 距离 + 方位角(弧度) 计算新点
+      function offsetLatLng(latDeg, lngDeg, distKm, bearingRad) {
+        const dLat = (distKm * Math.sin(bearingRad)) / 111;
+        const dLng =
+          (distKm * Math.cos(bearingRad)) /
+          (111 * Math.cos((latDeg * Math.PI) / 180));
+        return L.latLng(latDeg + dLat, lngDeg + dLng);
+      }
+
+      // 箭身起点 & 终点
+      const start = L.latLng(baseLat, baseLng);
+      const end   = offsetLatLng(baseLat, baseLng, lenKm, rad);
+
+      // 起点小圆点
+      L.circleMarker(start, {
+        radius: 5,
+        color: color,
+        fillColor: color,
+        fillOpacity: 1,
+        weight: 2,
+      }).addTo(arrowLayer);
+
+      // 主体粗线
+      L.polyline([start, end], {
+        weight: lineWidth,
+        color: color,
+        opacity: 1,
+        lineCap: "round",
+      }).addTo(arrowLayer);
+
+      // 三角形箭头尖端
+      const tipLenKm = Math.max(0.2, lenKm * 0.25); // 尖端长度（km）
+      const tipAngle = 20 * Math.PI / 180;          // 尖端张角（弧度）
+
+      // 尖端在末端，三角形另外两点在末端后方、左右各偏一点
+      const backLeftBearing  = rad + Math.PI + tipAngle;
+      const backRightBearing = rad + Math.PI - tipAngle;
+
+      const leftPoint  = offsetLatLng(end.lat, end.lng, tipLenKm, backLeftBearing);
+      const rightPoint = offsetLatLng(end.lat, end.lng, tipLenKm, backRightBearing);
+
+      // 画一个填充三角形
+      L.polygon([end, leftPoint, rightPoint], {
+        color: color,
+        fillColor: color,
+        fillOpacity: 1,
+        weight: 0,
+      }).addTo(arrowLayer);
+    }
+  </script>
+</body>
+</html>
