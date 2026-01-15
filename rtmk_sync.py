@@ -66,7 +66,9 @@ CONFIG = {
     "retry_sleep_sec": float(_env("FTP_RETRY_SLEEP", "2.0")),
 }
 
-START_DATE = dt.datetime.strptime(CONFIG["start_from_date"], "%Y-%m-%d").date()
+s = (CONFIG.get("start_from_date") or "").strip()[:10]
+START_DATE = dt.datetime.strptime(s, "%Y-%m-%d").date()
+
 
 RAW_DIR = ROOT / "raw"
 DATA_DIR = ROOT / "data"
