@@ -178,9 +178,16 @@ def ftp_connect() -> ftplib.FTP:
     raise RuntimeError(f"FTP接続に失敗しました: {last_err}")
 
 def list_remote_csv(ftp: ftplib.FTP) -> List[str]:
-    # cwd 済み想定
-    names = ftp.nlst()
-    return [n for n in names if n.lower().endswith(".csv")]
+    """リモートCSV一覧を取得（順序が不定なため、ファイル名から時刻を推定してソートする）"""
+    names = ftp.nlst()  # cwd 済み想定
+    csvs = [n for n in names if n.lower().endswith(".csv")]
+
+    def _key(n: str) -> Tuple[int, dt.datetime]:
+        d = extract_datetime_from_fname(n)
+        # 推定できないものは後ろに回す
+        return (0 if d else 1, d or dt.datetime.max)
+
+    return sorted(csvs, key=_key)
 
 
 # ----------------------------
@@ -217,6 +224,55 @@ def append_raw_to_monthly(raw_path: Path, ym: str) -> int:
             w.writerow(r)
     return len(data_rows)
 
+
+
+def normalize_monthly_csv(monthly_path: Path) -> None:
+    """月別CSVを Timestamp 列で厳密に昇順ソートし、同一Timestampは最後の行を採用する。
+    - FTPの一覧順序や追記順に依存せず、常に data/YYYY-MM.csv の時間順を保証する。
+    """
+    if not monthly_path.exists():
+        return
+
+    raw = monthly_path.read_text(encoding="utf-8", errors="ignore")
+    rows = list(csv.reader(io.StringIO(raw)))
+    if len(rows) <= 1:
+        return
+
+    header = rows[0]
+    data_rows = [r for r in rows[1:] if r]
+
+    # Timestamp列は 0列目想定（RTMK標準CSV: 'Timestamp,...'）
+    # フォーマット: 2026/01/01 00:00:00.433
+    def parse_ts(r: List[str]) -> Optional[dt.datetime]:
+        if not r:
+            return None
+        ts = (r[0] or "").strip()
+        try:
+            return dt.datetime.strptime(ts, "%Y/%m/%d %H:%M:%S.%f")
+        except Exception:
+            return None
+
+    # 同一Timestampは最後の行を残す（追記が後の方が新しい可能性があるため）
+    last_by_ts: dict[dt.datetime, List[str]] = {}
+    for r in data_rows:
+        t = parse_ts(r)
+        if t is None:
+            continue
+        last_by_ts[t] = r
+
+    if not last_by_ts:
+        return
+
+    sorted_items = [last_by_ts[t] for t in sorted(last_by_ts.keys())]
+
+    tmp_path = monthly_path.with_suffix(".csv.tmp")
+    with tmp_path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        w.writerows(sorted_items)
+
+    tmp_path.replace(monthly_path)
+
 def clear_target_month_files_if_rebuild(scope_files: List[str]) -> None:
     if not CONFIG["rebuild_months"]:
         return
@@ -237,7 +293,7 @@ def main() -> None:
     ftp: Optional[ftplib.FTP] = None
     try:
         ftp = ftp_connect()
-        remote = sorted(list_remote_csv(ftp))
+        remote = list_remote_csv(ftp)
         scope = [f for f in remote if file_in_scope(f)]
         if not scope:
             log("対象期間のファイルが見つかりません（START_FROM_DATE/FTP_DIR を確認）")
@@ -252,8 +308,10 @@ def main() -> None:
 
         ok = 0
         skipped = 0
+        touched_months: Set[str] = set()
         for f in new_files:
             ym = year_month_for(f)
+            touched_months.add(ym)
             try:
                 log(f"Downloading {f}")
                 raw_path = download_file(ftp, f)
@@ -264,6 +322,15 @@ def main() -> None:
             except Exception as e:
                 skipped += 1
                 log(f"[WARN] failed {f}: {e}")
+
+
+        # 月別CSVの時間順を保証（追記順に依存しない）
+        for ym in sorted(touched_months):
+            try:
+                normalize_monthly_csv(month_path(ym))
+                log(f"normalized -> {month_path(ym).name}")
+            except Exception as e:
+                log(f"[WARN] normalize failed {ym}: {e}")
 
         save_state(list(state_set))
         log(f"=== RTMK sync end (success) === ok={ok}, skipped={skipped}")
