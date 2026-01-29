@@ -1,32 +1,46 @@
 name: PWS FTP Sync
 
 on:
+  # 每 10 分钟自动运行（UTC 时间）
   schedule:
-    - cron: "*/10 * * * *"   # every 10 minutes (UTC)
+    - cron: "*/10 * * * *"
+
+  # 允许你在 GitHub 页面手动点击运行
   workflow_dispatch:
 
+  # 当你 push 代码到 main 分支时，也会自动运行一次
+  push:
+    branches: [ "main" ]
+
+# 允许 workflow 往仓库里写文件（commit / push）
 permissions:
   contents: write
 
+# 防止多个同步同时运行（非常重要）
 concurrency:
   group: pws-ftp-sync
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+
+    # 单次运行最长 60 分钟，防止无限卡死
     timeout-minutes: 60
 
     steps:
-      - name: Checkout
+      # ① 把仓库代码拉到 GitHub 的虚拟机上
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      # ② 准备 Python 环境
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Run sync
+      # ③ 运行你的同步脚本（从 FTP 拉数据、合并、排序）
+      - name: Run PWS FTP sync
         env:
           FTP_HOST: ${{ secrets.FTP_HOST }}
           FTP_USER: ${{ secrets.FTP_USER }}
@@ -36,14 +50,17 @@ jobs:
         run: |
           python rtmk_sync.py
 
-      - name: Commit & push if changed
+      # ④ 如果有数据更新，就自动提交并推送回 GitHub
+      - name: Commit and push if changed
         run: |
           if [ -z "$(git status --porcelain)" ]; then
-            echo "No changes."
+            echo "No changes to commit."
             exit 0
           fi
+
           git config user.name "pws-bot"
           git config user.email "pws-bot@users.noreply.github.com"
+
           git add data/*.csv state/*.json log/*.log || true
           git commit -m "Update PWS monthly data ($(date -u '+%Y-%m-%d %H:%M UTC'))"
           git push
