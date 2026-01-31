@@ -12274,3 +12274,11 @@
 [2026-01-31 13:40:14] merged -> 2026-01.csv (+1行)
 [2026-01-31 13:40:14] normalized -> 2026-01.csv
 [2026-01-31 13:40:14] === RTMK sync end (success) === ok=5, skipped=0
+[2026-01-31 14:01:30] === RTMK sync start ===
+[2026-01-31 14:01:30] Connecting to FTP... (attempt 1/3)
+[2026-01-31 14:01:34] Downloading 462_20260131T225000.CSV
+[2026-01-31 14:01:35] merged -> 2026-01.csv (+1行)
+[2026-01-31 14:01:35] Downloading 463_20260131T230000.CSV
+[2026-01-31 14:01:36] merged -> 2026-01.csv (+1行)
+[2026-01-31 14:01:36] normalized -> 2026-01.csv
+[2026-01-31 14:01:36] === RTMK sync end (success) === ok=2, skipped=0
