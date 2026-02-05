@@ -3,13 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PWS · 新海浜地图 + CSV风速数据</title>
+  <title data-i18n="pageTitle">PWS · 新海浜地图 + CSV风速数据</title>
 
   <!-- Leaflet & PapaParse：从 CDN 加载 -->
-  <link
-    rel="stylesheet"
-    href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
-  />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
@@ -34,9 +31,7 @@
       --accent: #3aa0ff;
       --hover: #13283f;
     }
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       background: var(--bg);
@@ -56,19 +51,14 @@
       top: 0;
       z-index: 10;
     }
-    header h1 {
-      margin: 0;
-      font-size: 18px;
-    }
+    header h1 { margin: 0; font-size: 18px; }
     .toolbar {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
       align-items: center;
     }
-    select,
-    input[type="text"],
-    input[type="range"] {
+    select, input[type="text"], input[type="range"] {
       padding: 6px 8px;
       border: 1px solid var(--grid);
       border-radius: 8px;
@@ -90,13 +80,8 @@
       border-color: var(--accent);
       color: #fff;
     }
-    button.ghost {
-      background: transparent;
-    }
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
+    button.ghost { background: transparent; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
     .csv-link {
       padding: 6px 10px;
       border-radius: 8px;
@@ -107,20 +92,14 @@
       text-decoration: none;
       cursor: pointer;
     }
-    .csv-link:hover {
-      background: var(--hover);
-    }
+    .csv-link:hover { background: var(--hover); }
     main {
       max-width: 1200px;
       margin: 0 auto;
       padding: 14px;
     }
     /* 默认：上下结构（地图上、表格下） */
-    .layout {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
+    .layout { display: flex; flex-direction: column; gap: 20px; }
     /* 超大屏：宽 >= 2560px 时左右结构 */
     @media (min-width: 2560px) {
       .layout {
@@ -136,47 +115,19 @@
       border-radius: 12px;
       padding: 10px;
     }
-    .map-card {
-      position: relative; /* 为图例绝对定位准备 */
-    }
+    .map-card { position: relative; }
     #map {
       height: 60vh;
       min-height: 360px;
       border-radius: 10px;
     }
-    .status {
-      font-size: 12px;
-      color: var(--muted);
-      margin-left: 8px;
-    }
-    .map-controls {
-      margin-top: 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      font-size: 12px;
-    }
-    .map-controls-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .time-label {
-      font-weight: 500;
-    }
-    #currentTime,
-    #currentSpeed {
-      font-family: "Consolas", "SF Mono", monospace;
-    }
-    .slider-wrap {
-      width: 100%;
-    }
-    .slider-wrap input[type="range"] {
-      width: 100%;
-      padding: 0;
-    }
+    .status { font-size: 12px; color: var(--muted); margin-left: 8px; }
+    .map-controls { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+    .map-controls-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+    .time-label { font-weight: 500; }
+    #currentTime, #currentSpeed { font-family: "Consolas", "SF Mono", monospace; }
+    .slider-wrap { width: 100%; }
+    .slider-wrap input[type="range"] { width: 100%; padding: 0; }
     .table-wrap {
       border: 1px solid var(--grid);
       border-radius: 10px;
@@ -184,33 +135,12 @@
       max-height: 70vh;
       background: var(--panel);
     }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-    thead {
-      background: var(--header);
-      position: sticky;
-      top: 0;
-      z-index: 1;
-    }
-    th,
-    td {
-      border-bottom: 1px solid var(--grid);
-      padding: 6px 8px;
-      text-align: left;
-      white-space: nowrap;
-    }
-    tbody tr:nth-child(even) td {
-      background: #f9fbff;
-    }
-    tbody tr:hover td {
-      background: var(--hover);
-    }
-    .spacer {
-      flex: 1;
-    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead { background: var(--header); position: sticky; top: 0; z-index: 1; }
+    th, td { border-bottom: 1px solid var(--grid); padding: 6px 8px; text-align: left; white-space: nowrap; }
+    tbody tr:nth-child(even) td { background: #f9fbff; }
+    tbody tr:hover td { background: var(--hover); }
+    .spacer { flex: 1; }
 
     /* 图例样式 */
     .legend {
@@ -225,54 +155,46 @@
       color: #333;
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
     }
-    .dark .legend {
-      background: rgba(16, 24, 32, 0.9);
-      color: #e0ecff;
-    }
-    .legend-title {
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-    .legend-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin: 2px 0;
-    }
+    .dark .legend { background: rgba(16, 24, 32, 0.9); color: #e0ecff; }
+    .legend-title { font-weight: 600; margin-bottom: 4px; }
+    .legend-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
     .legend-color {
       width: 14px;
       height: 8px;
       border-radius: 999px;
       border: 1px solid #ccc;
     }
-    .legend-low {
-      background: #2ecc71;
-      border-color: #29b866;
-    }
-    .legend-mid {
-      background: #f1c40f;
-      border-color: #d0a90c;
-    }
-    .legend-high {
-      background: #e74c3c;
-      border-color: #c0392b;
-    }
+    .legend-low  { background: #2ecc71; border-color: #29b866; }
+    .legend-mid  { background: #f1c40f; border-color: #d0a90c; }
+    .legend-high { background: #e74c3c; border-color: #c0392b; }
   </style>
 </head>
+
 <body>
   <header>
-    <h1>PWS · 新海浜地图 + CSV风速数据</h1>
+    <h1 data-i18n="title">PWS · 新海浜地图 + CSV风速数据</h1>
+
     <div class="toolbar">
-      <label>年份</label>
+      <label data-i18n="yearLabel">年份</label>
       <select id="yearSel"></select>
-      <label>月份</label>
+
+      <label data-i18n="monthLabel">月份</label>
       <select id="monSel"></select>
-      <button id="loadBtn" class="primary">加载 ./data/YYYY-MM.csv</button>
+
+      <button id="loadBtn" class="primary" data-i18n="loadBtn">加载 ./data/YYYY-MM.csv</button>
+
       <!-- CSV 下载按钮 -->
-      <a id="csvDownload" class="csv-link" href="#" download>下载当前 CSV</a>
+      <a id="csvDownload" class="csv-link" href="#" download data-i18n="csvDownload">下载当前 CSV</a>
+
       <span id="status" class="status"></span>
+
       <div class="spacer"></div>
-      <button id="themeBtn" class="ghost">切换深色/浅色</button>
+
+      <!-- 语言切换 -->
+      <button id="langBtn" class="ghost">日本語</button>
+
+      <!-- 主题切换 -->
+      <button id="themeBtn" class="ghost" data-i18n="themeBtn">切换深色/浅色</button>
     </div>
   </header>
 
@@ -283,48 +205,44 @@
 
       <!-- 风速颜色图例 -->
       <div class="legend">
-        <div class="legend-title">风速颜色图例</div>
+        <div class="legend-title" data-i18n="legendTitle">风速颜色图例</div>
         <div class="legend-row">
           <span class="legend-color legend-low"></span>
-          <span>&lt; 3 m/s（低风）</span>
+          <span data-i18n="legendLow">&lt; 3 m/s（低风）</span>
         </div>
         <div class="legend-row">
           <span class="legend-color legend-mid"></span>
-          <span>3 – 7 m/s（中风）</span>
+          <span data-i18n="legendMid">3 – 7 m/s（中风）</span>
         </div>
         <div class="legend-row">
           <span class="legend-color legend-high"></span>
-          <span>≥ 7 m/s（高风）</span>
+          <span data-i18n="legendHigh">≥ 7 m/s（高风）</span>
         </div>
       </div>
 
       <div class="map-controls">
         <div class="map-controls-row">
           <div class="time-label">
-            当前日期：<span id="currentTime">--</span>
-            ｜ 风速：<span id="currentSpeed">--</span> m/s
+            <span data-i18n="currentDatePrefix">当前日期：</span><span id="currentTime">--</span>
+            <span data-i18n="speedPrefix">｜ 风速：</span><span id="currentSpeed">--</span> <span data-i18n="msUnit">m/s</span>
           </div>
+
           <div class="btn-group">
-            <button id="prevBtn">◀ 上一条</button>
-            <button id="playPauseBtn" class="primary">▶ 播放</button>
-            <button id="nextBtn">下一条 ▶</button>
+            <button id="prevBtn" data-i18n="prevBtn">◀ 上一条</button>
+            <button id="playPauseBtn" class="primary" data-i18n="playBtn">▶ 播放</button>
+            <button id="nextBtn" data-i18n="nextBtn">下一条 ▶</button>
           </div>
         </div>
+
         <div class="map-controls-row">
-          <div>时间位置：</div>
+          <div data-i18n="timePos">时间位置：</div>
           <div class="slider-wrap">
-            <input
-              type="range"
-              id="timeSlider"
-              min="0"
-              max="0"
-              value="0"
-              step="1"
-            />
+            <input type="range" id="timeSlider" min="0" max="0" value="0" step="1" />
           </div>
         </div>
+
         <div class="status">
-          坐标：新海浜（35.21622, 136.11864） · 箭头长度 ≈ 风速，方向 ≈ 风向
+          <span data-i18n="mapHint">坐标：新海浜（35.21622, 136.11864） · 箭头长度 ≈ 风速，方向 ≈ 风向</span>
         </div>
       </div>
     </section>
@@ -332,7 +250,7 @@
     <!-- 下/右：表格 -->
     <section class="card">
       <div class="toolbar" style="margin-bottom: 10px">
-        <label>搜索</label>
+        <label data-i18n="searchLabel">搜索</label>
         <input
           id="searchInput"
           type="text"
@@ -340,6 +258,7 @@
           style="min-width: 260px"
         />
       </div>
+
       <div class="table-wrap">
         <table id="data-table">
           <thead id="table-head"></thead>
@@ -350,6 +269,122 @@
   </main>
 
   <script>
+    // ========= i18n（中文/日文切换）=========
+    const I18N = {
+      zh: {
+        pageTitle: "PWS · 新海浜地图 + CSV风速数据",
+        title: "PWS · 新海浜地图 + CSV风速数据",
+        yearLabel: "年份",
+        monthLabel: "月份",
+        loadBtn: "加载 ./data/YYYY-MM.csv",
+        csvDownload: "下载当前 CSV",
+        themeBtn: "切换深色/浅色",
+        legendTitle: "风速颜色图例",
+        legendLow: "< 3 m/s（低风）",
+        legendMid: "3 – 7 m/s（中风）",
+        legendHigh: "≥ 7 m/s（高风）",
+        currentDatePrefix: "当前日期：",
+        speedPrefix: "｜ 风速：",
+        msUnit: "m/s",
+        prevBtn: "◀ 上一条",
+        playBtn: "▶ 播放",
+        pauseBtn: "⏸ 暂停",
+        nextBtn: "下一条 ▶",
+        timePos: "时间位置：",
+        mapHint: "坐标：新海浜（35.21622, 136.11864） · 箭头长度 ≈ 风速，方向 ≈ 风向",
+        searchLabel: "搜索",
+        searchPlaceholder: "按任意关键词过滤（全列匹配）",
+        langBtnToJa: "日本語",
+        langBtnToZh: "中文",
+        // status messages
+        statusRequest: (path) => `请求 ${path} ...`,
+        statusLoaded: (rows, cols) => `加载成功：${rows} 行 · ${cols} 列`,
+        statusEmpty: "CSV 为空",
+        statusParseFail: (msg) => `解析失败：${msg}`,
+        statusLoadFail: (path, msg) => `加载失败：${path}（${msg}）`,
+        statusNoAnim: "无可用于动画的数据行",
+        statusNoValidWind: "找不到包含有效风向/风速的数据行（请检查列名是否与代码一致）",
+        statusAnim: (idx, total, ts) => `动画：${idx} / ${total} · 原始时间 = ${ts}`,
+        statusAnimNoTime: (idx, total) => `动画：${idx} / ${total}（找不到时间列）`,
+        alertLoadFirst: "请先点击“加载 CSV”按钮",
+      },
+      ja: {
+        pageTitle: "PWS · 新海浜マップ + CSV 風速データ",
+        title: "PWS · 新海浜マップ + CSV 風速データ",
+        yearLabel: "年",
+        monthLabel: "月",
+        loadBtn: "読み込み ./data/YYYY-MM.csv",
+        csvDownload: "現在の CSV をダウンロード",
+        themeBtn: "ダーク/ライト切替",
+        legendTitle: "風速カラーレジェンド",
+        legendLow: "< 3 m/s（弱風）",
+        legendMid: "3 – 7 m/s（中風）",
+        legendHigh: "≥ 7 m/s（強風）",
+        currentDatePrefix: "日付：",
+        speedPrefix: "｜ 風速：",
+        msUnit: "m/s",
+        prevBtn: "◀ 前へ",
+        playBtn: "▶ 再生",
+        pauseBtn: "⏸ 一時停止",
+        nextBtn: "次へ ▶",
+        timePos: "時間位置：",
+        mapHint: "座標：新海浜（35.21622, 136.11864） · 矢印の長さ ≈ 風速、向き ≈ 風向",
+        searchLabel: "検索",
+        searchPlaceholder: "キーワードでフィルタ（全列）",
+        langBtnToJa: "日本語",
+        langBtnToZh: "中文",
+        // status messages
+        statusRequest: (path) => `${path} を取得中...`,
+        statusLoaded: (rows, cols) => `読み込み成功：${rows} 行 · ${cols} 列`,
+        statusEmpty: "CSV が空です",
+        statusParseFail: (msg) => `解析失敗：${msg}`,
+        statusLoadFail: (path, msg) => `読み込み失敗：${path}（${msg}）`,
+        statusNoAnim: "アニメーション用のデータ行がありません",
+        statusNoValidWind: "有効な風向/風速の行が見つかりません（列名がコードと一致しているか確認してください）",
+        statusAnim: (idx, total, ts) => `アニメ：${idx} / ${total} · 元の時刻 = ${ts}`,
+        statusAnimNoTime: (idx, total) => `アニメ：${idx} / ${total}（時刻列が見つかりません）`,
+        alertLoadFirst: "先に「CSV 読み込み」を押してください",
+      }
+    };
+
+    let currentLang = "zh";
+
+    function t(key, ...args) {
+      const dict = I18N[currentLang] || I18N.zh;
+      const v = dict[key];
+      if (typeof v === "function") return v(...args);
+      return v != null ? v : (I18N.zh[key] ?? "");
+    }
+
+    function applyLang(lang) {
+      currentLang = lang;
+      const dict = I18N[lang] || I18N.zh;
+
+      // 1) textContent を一括置換（data-i18n）
+      document.querySelectorAll("[data-i18n]").forEach((el) => {
+        const key = el.getAttribute("data-i18n");
+        if (dict[key] != null) el.textContent = dict[key];
+      });
+
+      // 2) <title> の更新（data-i18n は head 内で NodeList に入るが保険）
+      document.title = dict.pageTitle;
+
+      // 3) placeholder
+      const si = document.getElementById("searchInput");
+      if (si) si.placeholder = dict.searchPlaceholder;
+
+      // 4) 言語ボタン：次に切り替える言語を表示
+      const lb = document.getElementById("langBtn");
+      if (lb) lb.textContent = (lang === "zh" ? dict.langBtnToJa : dict.langBtnToZh);
+
+      // 5) html lang 属性
+      document.documentElement.lang = (lang === "ja" ? "ja" : "zh-CN");
+
+      // 6) 再生/停止ボタンは状態に合わせて更新
+      const pp = document.getElementById("playPauseBtn");
+      if (pp) pp.textContent = (isPlaying ? dict.pauseBtn : dict.playBtn);
+    }
+
     // ========= 基本配置 =========
     const CONFIG = {
       station: {
@@ -392,13 +427,21 @@
       statusEl.textContent = msg || "";
     }
 
+    // ========= 语言切换按钮 =========
+    document.getElementById("langBtn").addEventListener("click", () => {
+      applyLang(currentLang === "zh" ? "ja" : "zh");
+      // 语言切换后，顺便刷新一遍状态文本（如果当前有）
+      if (statusEl.textContent) setStatus(statusEl.textContent);
+    });
+
     // ========= 主题切换 =========
     document.getElementById("themeBtn").addEventListener("click", () => {
       document.body.classList.toggle("dark");
       const btn = document.getElementById("themeBtn");
+      // 主题按钮文案由 i18n 控制，所以这里只保留原逻辑（可选）
       btn.textContent = document.body.classList.contains("dark")
-        ? "切换为浅色"
-        : "切换深色/浅色";
+        ? (currentLang === "ja" ? "ライトへ" : "切换为浅色")
+        : t("themeBtn");
     });
 
     // ========= 初始化地图 =========
@@ -430,7 +473,7 @@
       for (let m = 0; m < 12; m++) {
         const opt = document.createElement("option");
         opt.value = m;
-        opt.textContent = (m + 1) + " 月";
+        opt.textContent = (m + 1) + (currentLang === "ja" ? "月" : " 月");
         if (m === now.getMonth()) opt.selected = true;
         monSel.appendChild(opt);
       }
@@ -446,9 +489,9 @@
       // 更新下载链接：当前选择的年月
       csvDownload.href = path;
       csvDownload.download = `${ymStr}.csv`;
-      csvDownload.textContent = `下载 ${ymStr}.csv`;
+      csvDownload.textContent = (currentLang === "ja" ? `ダウンロード ${ymStr}.csv` : `下载 ${ymStr}.csv`);
 
-      setStatus(`请求 ${path} ...`);
+      setStatus(t("statusRequest", path));
 
       try {
         const res = await fetch(`${path}?t=${Date.now()}`, { cache: "no-store" });
@@ -462,7 +505,7 @@
           complete: (parsed) => {
             const rows = parsed.data || [];
             if (!rows.length) {
-              setStatus("CSV 为空");
+              setStatus(t("statusEmpty"));
               rawRows = [];
               renderTable([]);
               stopWindAnimation();
@@ -470,18 +513,18 @@
               return;
             }
             rawRows = rows;
-            setStatus(`加载成功：${rows.length} 行 · ${Object.keys(rows[0]).length} 列`);
+            setStatus(t("statusLoaded", rows.length, Object.keys(rows[0]).length));
             renderTable(rows);
             // 初始化动画
             startWindAnimation(rows);
           },
           error: (err) => {
-            setStatus("解析失败：" + err.message);
+            setStatus(t("statusParseFail", err.message));
           },
         });
       } catch (err) {
         console.error(err);
-        setStatus(`加载失败：${path}（${err.message}）`);
+        setStatus(t("statusLoadFail", path, err.message));
       }
     }
 
@@ -491,7 +534,6 @@
     function renderTable(rows) {
       tableHead.innerHTML = "";
       tableBody.innerHTML = "";
-
       if (!rows || !rows.length) return;
 
       const headers = Object.keys(rows[0]);
@@ -529,9 +571,7 @@
         return;
       }
       const filtered = rawRows.filter((row) =>
-        Object.values(row).some(
-          (v) => v != null && String(v).toLowerCase().includes(q)
-        )
+        Object.values(row).some((v) => v != null && String(v).toLowerCase().includes(q))
       );
       renderTable(filtered);
       startWindAnimation(filtered);
@@ -550,7 +590,7 @@
       arrowLayer.clearLayers();
 
       if (!rows || !rows.length) {
-        setStatus("无可用于动画的数据行");
+        setStatus(t("statusNoAnim"));
         animRows = [];
         return;
       }
@@ -566,7 +606,7 @@
       });
 
       if (!animRows.length) {
-        setStatus("找不到包含有效风向/风速的数据行（请检查列名是否与代码一致）");
+        setStatus(t("statusNoValidWind"));
         return;
       }
 
@@ -576,14 +616,14 @@
       timeSlider.value = 0;
       timeSlider.step = 1;
 
-      // 先画出第 1 帧，让你立刻看到时间和风速
+      // 先画出第 1 帧
       drawSingleArrow(animRows[0]);
       updateTimeUI(animRows[0], 0);
 
-      // 初始化后保持“暂停”，等你按 ▶ 播放
+      // 初始化后保持“暂停”
       stopWindAnimation();
       isPlaying = false;
-      playPauseBtn.textContent = "▶ 播放";
+      playPauseBtn.textContent = t("playBtn");
     }
 
     function stepWindAnimation() {
@@ -619,12 +659,10 @@
         const datePart = dateStr.split(/[ T]/)[0];  // "2025/10/01"
         currentTimeEl.textContent = datePart;
 
-        setStatus(
-          `动画：${idx + 1} / ${animRows.length} · 原始时间 = ${tsRaw}`
-        );
+        setStatus(t("statusAnim", idx + 1, animRows.length, tsRaw));
       } else {
         currentTimeEl.textContent = "--";
-        setStatus(`动画：${idx + 1} / ${animRows.length}（找不到时间列）`);
+        setStatus(t("statusAnimNoTime", idx + 1, animRows.length));
       }
 
       // 风速显示：保留 1 位小数
@@ -648,22 +686,17 @@
       // 手动拖动时暂停播放
       stopWindAnimation();
       isPlaying = false;
-      playPauseBtn.textContent = "▶ 播放";
+      playPauseBtn.textContent = t("playBtn");
     });
 
     prevBtn.addEventListener("click", () => {
       if (!animRows.length) {
-        if (rawRows.length) {
-          // 如果还没初始化动画但已经有数据，就顺便初始化
-          startWindAnimation(rawRows);
-        } else {
-          alert("请先点击“加载 CSV”按钮");
-          return;
-        }
+        if (rawRows.length) startWindAnimation(rawRows);
+        else { alert(t("alertLoadFirst")); return; }
       }
       stopWindAnimation();
       isPlaying = false;
-      playPauseBtn.textContent = "▶ 播放";
+      playPauseBtn.textContent = t("playBtn");
       animIndex = (animIndex - 1 + animRows.length) % animRows.length;
       const row = animRows[animIndex];
       drawSingleArrow(row);
@@ -672,16 +705,12 @@
 
     nextBtn.addEventListener("click", () => {
       if (!animRows.length) {
-        if (rawRows.length) {
-          startWindAnimation(rawRows);
-        } else {
-          alert("请先点击“加载 CSV”按钮");
-          return;
-        }
+        if (rawRows.length) startWindAnimation(rawRows);
+        else { alert(t("alertLoadFirst")); return; }
       }
       stopWindAnimation();
       isPlaying = false;
-      playPauseBtn.textContent = "▶ 播放";
+      playPauseBtn.textContent = t("playBtn");
       animIndex = (animIndex + 1) % animRows.length;
       const row = animRows[animIndex];
       drawSingleArrow(row);
@@ -691,23 +720,17 @@
     playPauseBtn.addEventListener("click", () => {
       // 兜底：如果动画数组还没准备好，但原始数据有，就在这里初始化
       if (!animRows.length) {
-        if (rawRows.length) {
-          startWindAnimation(rawRows);
-        } else {
-          alert("请先点击“加载 CSV”按钮");
-          return;
-        }
+        if (rawRows.length) startWindAnimation(rawRows);
+        else { alert(t("alertLoadFirst")); return; }
       }
 
       if (isPlaying) {
-        // 现在是播放状态 -> 改为暂停
         stopWindAnimation();
         isPlaying = false;
-        playPauseBtn.textContent = "▶ 播放";
+        playPauseBtn.textContent = t("playBtn");
       } else {
-        // 现在是暂停 -> 开始播放
         isPlaying = true;
-        playPauseBtn.textContent = "⏸ 暂停";
+        playPauseBtn.textContent = t("pauseBtn");
         stepWindAnimation();
       }
     });
@@ -742,7 +765,6 @@
       // 角度换算（Leaflet: 0° 指向东，我们用 dirDeg-90° 的定义）
       const rad = ((dirDeg - 90) * Math.PI) / 180;
 
-      // 帮助函数：根据起点 + 距离 + 方位角(弧度) 计算新点
       function offsetLatLng(latDeg, lngDeg, distKm, bearingRad) {
         const dLat = (distKm * Math.sin(bearingRad)) / 111;
         const dLng =
@@ -751,11 +773,9 @@
         return L.latLng(latDeg + dLat, lngDeg + dLng);
       }
 
-      // 箭身起点 & 终点
       const start = L.latLng(baseLat, baseLng);
       const end   = offsetLatLng(baseLat, baseLng, lenKm, rad);
 
-      // 起点小圆点
       L.circleMarker(start, {
         radius: 5,
         color: color,
@@ -764,7 +784,6 @@
         weight: 2,
       }).addTo(arrowLayer);
 
-      // 主体粗线
       L.polyline([start, end], {
         weight: lineWidth,
         color: color,
@@ -772,18 +791,15 @@
         lineCap: "round",
       }).addTo(arrowLayer);
 
-      // 三角形箭头尖端
-      const tipLenKm = Math.max(0.2, lenKm * 0.25); // 尖端长度（km）
-      const tipAngle = 20 * Math.PI / 180;          // 尖端张角（弧度）
+      const tipLenKm = Math.max(0.2, lenKm * 0.25);
+      const tipAngle = 20 * Math.PI / 180;
 
-      // 尖端在末端，三角形另外两点在末端后方、左右各偏一点
       const backLeftBearing  = rad + Math.PI + tipAngle;
       const backRightBearing = rad + Math.PI - tipAngle;
 
       const leftPoint  = offsetLatLng(end.lat, end.lng, tipLenKm, backLeftBearing);
       const rightPoint = offsetLatLng(end.lat, end.lng, tipLenKm, backRightBearing);
 
-      // 画一个填充三角形
       L.polygon([end, leftPoint, rightPoint], {
         color: color,
         fillColor: color,
@@ -791,6 +807,9 @@
         weight: 0,
       }).addTo(arrowLayer);
     }
+
+    // ========= 初期言語設定 =========
+    applyLang("zh");
   </script>
 </body>
 </html>
