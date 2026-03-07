@@ -26495,3 +26495,11 @@
 [2026-03-07 10:33:26] merged -> 2026-03.csv (+1行)
 [2026-03-07 10:33:26] normalized -> 2026-03.csv
 [2026-03-07 10:33:26] === RTMK sync end (success) === ok=4, skipped=0
+[2026-03-07 10:53:21] === RTMK sync start ===
+[2026-03-07 10:53:21] Connecting to FTP... (attempt 1/3)
+[2026-03-07 10:53:25] Downloading 483_20260307T194000.CSV
+[2026-03-07 10:53:26] merged -> 2026-03.csv (+1行)
+[2026-03-07 10:53:26] Downloading 484_20260307T195000.CSV
+[2026-03-07 10:53:27] merged -> 2026-03.csv (+1行)
+[2026-03-07 10:53:27] normalized -> 2026-03.csv
+[2026-03-07 10:53:27] === RTMK sync end (success) === ok=2, skipped=0
