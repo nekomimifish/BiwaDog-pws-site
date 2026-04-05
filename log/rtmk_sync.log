@@ -38288,3 +38288,15 @@
 [2026-04-05 22:41:37] merged -> 2026-04.csv (+1行)
 [2026-04-05 22:41:37] normalized -> 2026-04.csv
 [2026-04-05 22:41:37] === RTMK sync end (success) === ok=5, skipped=0
+[2026-04-05 23:18:20] === RTMK sync start ===
+[2026-04-05 23:18:20] Connecting to FTP... (attempt 1/3)
+[2026-04-05 23:18:30] FTP connect failed: [Errno -3] Temporary failure in name resolution
+[2026-04-05 23:18:32] Connecting to FTP... (attempt 2/3)
+[2026-04-05 23:18:39] Downloading 732_20260406T075000.CSV
+[2026-04-05 23:18:40] merged -> 2026-04.csv (+1行)
+[2026-04-05 23:18:40] Downloading 733_20260406T080000.CSV
+[2026-04-05 23:18:41] merged -> 2026-04.csv (+1行)
+[2026-04-05 23:18:41] Downloading 734_20260406T081000.CSV
+[2026-04-05 23:18:41] merged -> 2026-04.csv (+1行)
+[2026-04-05 23:18:41] normalized -> 2026-04.csv
+[2026-04-05 23:18:41] === RTMK sync end (success) === ok=3, skipped=0
