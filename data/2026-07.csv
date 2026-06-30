@@ -1,0 +1,2 @@
+Timestamp,TZ,WD_AV (deg),WS_AV (m/s),WS_MX (m/s),WS_IMX_WD (deg),Bar_AV (hpa),Bar_MX (hpa),Bar_MN (hpa),Hum_AV (%),Hum_MX (%),Hum_MN (%),Temp_AV (degC),Temp_MX (degC),Temp_MN (degC),Status,VEXT (V)
+2026/07/01 00:00:00.438,n,193.30896,2.632449,3.34,201,999.64072,999.7,999.6,99.800528,99.8,99.8,23.931812,24.2,23.7,0,11.191704
