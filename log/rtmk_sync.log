@@ -84362,3 +84362,11 @@
 [2026-08-16 21:54:33] merged -> 2026-08.csv (+1行)
 [2026-08-16 21:54:33] normalized -> 2026-08.csv
 [2026-08-16 21:54:33] === RTMK sync end (success) === ok=2, skipped=0
+[2026-08-16 22:18:25] === RTMK sync start ===
+[2026-08-16 22:18:25] Connecting to FTP... (attempt 1/3)
+[2026-08-16 22:18:29] Downloading 879_20260817T070000.CSV
+[2026-08-16 22:18:29] merged -> 2026-08.csv (+1行)
+[2026-08-16 22:18:29] Downloading 880_20260817T071000.CSV
+[2026-08-16 22:18:30] merged -> 2026-08.csv (+1行)
+[2026-08-16 22:18:30] normalized -> 2026-08.csv
+[2026-08-16 22:18:30] === RTMK sync end (success) === ok=2, skipped=0
